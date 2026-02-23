@@ -2458,7 +2458,7 @@ final_df.to_csv(file, index=False)"""
 worker_num = 8
 reps = 20000
 functions = [alpha1_9, alpha1_7, alpha1_5, alpha1_3, alpha1_1]
-
+#functions = [alpha1_5, alpha1_3, alpha1_1]
 results_buffer = []
 buffer_size = 5000   # write every 5k rows
 
