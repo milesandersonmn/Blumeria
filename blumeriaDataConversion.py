@@ -594,102 +594,12 @@ summary_statistics.append(afs_quant[2]) #29 0.5
 summary_statistics.append(afs_quant[3]) #30 0.7
 summary_statistics.append(afs_quant[4]) #31 0.9
 afs_entries = []
-"""
-for x in range(1, len(sfs)-1):
-    #print(x)
-    num_mutations = sfs[x]
-    freq = x / 43
-    afs_entries.extend([freq] * int(num_mutations))
-    print(num_mutations)
 
-afs_prop = sfs / sfs.sum()         # convert to proportions
-
-x = np.arange(1, len(afs_prop) + 1)
-import matplotlib.pyplot as plt
-plt.figure()
-plt.bar(x, afs_prop)
-plt.xlabel("Derived allele count")
-plt.ylabel("Proportion of SNPs")
-plt.title("Allele Frequency Spectrum (Proportions)")
-#plt.xscale("logit")
-plt.show()
-"""
 pos = callset['variants/POS']
 chrom = callset['variants/CHROM']
 print("pos:", pos)
 print("chrom:", chrom)
-"""
-# -------------------------
-# 3. Define 10 kb windows
-# -------------------------
-window_size = 10_000
 
-# Create windows across chromosome range
-windows = allel.windowed_statistic(
-    pos,
-    values=ac,
-    statistic=lambda x: x,
-    size=window_size,
-    step=window_size
-)[1]  # get window boundaries
-
-# -------------------------
-# 4. Compute Tajima's D per window
-# -------------------------
-tajd, windows, counts = allel.windowed_tajima_d(
-    pos,
-    ac,
-    size=window_size,
-    step=window_size
-)
-
-# tajd = Tajima's D per window
-# windows = (start, stop) coordinates
-# counts = number of variants per window
-print(tajd)
-"""
-"""
-window_size = 100_000
-
-results = []
-
-for c in np.unique(chrom):
-    
-    mask = chrom == c
-    
-    pos_c = pos[mask]
-    ac_c = ac[mask]
-    
-    # Filter segregating sites AFTER chromosome split
-    seg = ac_c.is_segregating()
-    pos_c = pos_c[seg]
-    ac_c = ac_c[seg]
-    # Keep only biallelic sites
-    bi = ac_c.max_allele() == 1
-    
-    # Combine filters
-    keep = seg & bi
-    
-    pos_c = pos_c[keep]
-    ac_c = ac_c[keep]
-    
-    # Ensure sorted (usually already is)
-    order = np.argsort(pos_c)
-    pos_c = pos_c[order]
-    ac_c = ac_c[order]
-    
-    tajd, windows, counts = allel.windowed_tajima_d(
-        pos_c,
-        ac_c,
-        size=window_size,
-        step=window_size
-    )
-    
-    results.append(( tajd))
-
-print(results)
-print(np.mean(results))
-"""
 window_size = 100_000
 results = []
 
@@ -887,6 +797,115 @@ print(summary_statistics)
 print(len(summary_statistics))
 
 
+n = 43
+a1 = np.sum(1 / np.arange(1, n))
+num_windows = 30 
+windows = np.linspace(0, 3_000_000, num_windows + 1)
+print(windows)
+theta_pi = []
+theta_w = []
+
+results = []
+
+n = 43  # number of haploid samples
+print("n:", n)
+a1 = np.sum(1 / np.arange(1, n))
+print("a1:", a1)
+print("chrom:", np.unique(chrom))
+for c in np.unique(chrom):
+
+    mask = chrom == c
+    pos_c = pos[mask]
+    ac_c = ac[mask]
+
+    # Filter segregating + biallelic
+    seg = ac_c.is_segregating()
+    bi = ac_c.max_allele() == 1
+    keep = seg & bi
+
+    pos_c = pos_c[keep]
+    ac_c = ac_c[keep]
+
+    if len(pos_c) == 0:
+        continue
+
+    # Sort
+    order = np.argsort(pos_c)
+    pos_c = pos_c[order]
+    ac_c = ac_c[order]
+
+    # Haploid allele frequency
+    p = ac_c[:, 1] / n
+    pi_per_site = 2 * p * (1 - p)
+
+    # ---- WINDOW DEFINITION FROM VCF POSITIONS ----
+    start = pos_c.min()
+    end = pos_c.max()
+
+    windows = np.arange(start, end + window_size, window_size)
+
+    stat_per_window = []
+
+    for left, right in zip(windows[:-1], windows[1:]):
+
+        loc = (pos_c >= left) & (pos_c < right)
+        S = np.sum(loc)
+
+        if S == 0:
+            stat_per_window.append(np.nan)
+            continue
+
+        theta_pi = np.sum(pi_per_site[loc])
+        theta_w = S / a1
+
+        if theta_pi > 0:
+            stat = (theta_pi - theta_w) / theta_pi
+        else:
+            stat = np.nan
+
+        stat_per_window.append(stat)
+
+    results.append(np.array(stat_per_window))
+print("norm_Taj:", results)
+print(np.mean(results))
+
+summary_statistics.append(np.nanmean(results)) #102-103 normalized Tajima's D
+summary_statistics.append(np.nanstd(results))
+
+r2 = np.clip(r2, 0, 1)
+proportions = np.histogram(r2, bins=np.arange(0, 1.1, 0.1))[0] / len(r2)
+print(proportions)
+
+summary_statistics.extend(proportions) #104-113 LD Frequency spectrum
+
+summary_statistics.append(proportions[0]-proportions[9]) #114 is difference between unlinked and fully linked frequencies
+
+
+ild_all = np.clip(ild_all, 0, 1)
+
+proportions = np.histogram(ild_all, bins=np.arange(0, 1.1, 0.1))[0] / len(ild_all)
+print(proportions) 
+summary_statistics.extend(proportions) #115-124 ILD Frequency spectrum
+
+summary_statistics.append(proportions[0]-proportions[9]) #125 is difference between unlinked and fully linked frequencies
+
+
+r2_norm = np.clip(r2_norm, 0, 1) 
+
+proportions = np.histogram(r2_norm, bins=np.arange(0, 1.1, 0.1))[0] / len(r2_norm)
+print(proportions) 
+summary_statistics.extend(proportions) #126-135 ILD Frequency spectrum
+
+summary_statistics.append(proportions[0]-proportions[9]) #136 is difference between unlinked and fully linked frequencies
+
+ild_norm_all = np.clip(ild_norm_all, 0, 1)
+proportions = np.histogram(ild_norm_all, bins=np.arange(0, 1.1, 0.1))[0] / len(ild_norm_all)
+print(proportions) 
+summary_statistics.extend(proportions) #137-146 ILD Frequency spectrum
+
+summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
+print(summary_statistics)
+
 import pandas as pd
 df = pd.DataFrame(summary_statistics).T
-df.to_csv("observed_sum_stats.csv", mode='a', index=False)
+df.to_csv("observed_sum_stats.csv", index=False)
