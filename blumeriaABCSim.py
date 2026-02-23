@@ -35,13 +35,15 @@ file = (
     f"{target_min}_{target_max}_unfoldedSFS.csv"
 )
 #growth_rate_low = 0.000001
-#growth_rate_high = 0.0001
+#growth_rate_high = 0.005
 exclude_ac_below = 2
 ploidy = 1
 #growth_rate_low = 0
 #growth_rate_high = 0
-growth_rate_high = -0.000001
-growth_rate_low = -0.0001
+#growth_rate_high = -0.000001
+#growth_rate_low = -0.005
+growth_rate_high = 0.005
+growth_rate_low = -0.005
 
 r_break = math.log(2) #Recombination rate needed to satisfy probability 2^-t inheritance of two chromosomes
 chrom_positions = [0, 1e6, 2e6, 3e6] #1Mb chromosome sizes
@@ -719,6 +721,8 @@ def alpha1_9(arg):
             elif alpha == 1.1:
                 summary_statistics.append(5)
 
+            summary_statistics.append(growth_rate) #Growth rate
+
             summary_statistics.append(Ne) #Second column is Ne
 
             summary_statistics.append(alpha) #Third column is alpha parameter
@@ -1056,6 +1060,8 @@ def alpha1_7(arg):
             elif alpha == 1.1:
                 summary_statistics.append(5)
             
+            summary_statistics.append(growth_rate) #Growth rate     
+
             summary_statistics.append(Ne) #Second column is Ne
 
             summary_statistics.append(alpha) #Third column is alpha parameter
@@ -1411,6 +1417,9 @@ def alpha1_5(arg):
                 summary_statistics.append(4)
             elif alpha == 1.1:
                 summary_statistics.append(5)
+
+            summary_statistics.append(growth_rate) #Growth rate  
+            
             summary_statistics.append(Ne) #Second column is Ne
 
             summary_statistics.append(alpha) #Third column is alpha parameter
@@ -1764,6 +1773,9 @@ def alpha1_3(arg):
                 summary_statistics.append(4)
             elif alpha == 1.1:
                 summary_statistics.append(5)
+
+            summary_statistics.append(growth_rate) #Growth rate  
+            
             summary_statistics.append(Ne) #Second column is Ne
 
             summary_statistics.append(alpha) #Third column is alpha parameter
@@ -2117,6 +2129,9 @@ def alpha1_1(arg):
                 summary_statistics.append(4)
             elif alpha == 1.1:
                 summary_statistics.append(5)
+
+            summary_statistics.append(growth_rate) #Growth rate  
+
             summary_statistics.append(Ne) #Second column is Ne
 
             summary_statistics.append(alpha) #Third column is alpha parameter
