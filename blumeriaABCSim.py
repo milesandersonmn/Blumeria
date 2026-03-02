@@ -5,6 +5,8 @@ import tskit
 import scipy
 import allel
 import pandas as pd
+import itertools
+import matplotlib.pyplot as plt
 
 import os
 os.chdir("/Users/milesanderson/PhD/Blumeria/summary_stats/growth")
@@ -30,7 +32,7 @@ mu = 5e-7
 r_chrom = 3.37e-7
 #file = "summary_statistics_growth_mu5e-7_rho3e-7_2860_2900_unfoldedSFS.csv"
 file = (
-    f"summary_statistics_contraction_"
+    f"summary_statistics_test_"
     f"mu{mu:.0e}_rho{r_chrom:.2e}_"
     f"{target_min}_{target_max}_unfoldedSFS.csv"
 )
@@ -38,12 +40,12 @@ file = (
 #growth_rate_high = 0.005
 exclude_ac_below = 2
 ploidy = 1
-#growth_rate_low = 0
-#growth_rate_high = 0
+growth_rate_low = 0
+growth_rate_high = 0
 #growth_rate_high = -0.000001
+#growth_rate_low = -0.0001
+#growth_rate_high = 0.005
 #growth_rate_low = -0.005
-growth_rate_high = 0.005
-growth_rate_low = -0.005
 
 r_break = math.log(2) #Recombination rate needed to satisfy probability 2^-t inheritance of two chromosomes
 chrom_positions = [0, 1e6, 2e6, 3e6] #1Mb chromosome sizes
@@ -676,6 +678,113 @@ def calculate_Anderson_rsq_norm(mask, ts_chroms, r2_norm):
 
     return scaled_r2_norm
 
+######Fold 2SFS
+
+def fold_2sfs(sfs_2d, n):
+    size = n // 2 + 1
+    sfs_2d_folded = np.zeros((size, size), dtype=np.int64)
+    for i in range(n + 1):
+        for j in range(n + 1):
+            fi = min(i, n - i)
+            fj = min(j, n - j)
+            sfs_2d_folded[fi, fj] += sfs_2d[i, j]
+    return sfs_2d_folded
+
+
+######Compute hi_lo PMC
+
+def compute_hiloPMI(sfs_2d_folded, mac, ic):
+    eta_lo = np.sum((mac >= 1) & (mac < ic)) #/ len(mac)
+    eta_hi = np.sum(mac >= ic) #/ len(mac)
+
+    total_pairs = sfs_2d_folded[1:, :].sum()
+    eta_hilo = sfs_2d_folded[1:ic, ic:].sum() #/ total_pairs
+
+    print("double sum:", sfs_2d_folded[1:ic, ic:])
+    print(f"eta_lo: {eta_lo:.4f}, eta_hi: {eta_hi:.4f}, eta_hilo: {eta_hilo:.4f}")
+    print(f"lo*hi: {eta_lo * eta_hi:.4f}")
+
+    return np.log(eta_hilo / (eta_lo * eta_hi))
+
+
+######Windowed test hiloPMC
+def compute_window_hiloPMI(mts, n, window_start, window_end, ic=2):
+    # --- 1. Get biallelic genotypes in window ---
+    biallelic_genotype_matrix = []
+
+    for var in mts.variants():
+        if not (window_start <= var.site.position < window_end):
+            continue
+        alleles = [a for a in var.alleles if a is not None]
+        if len(alleles) == 2:
+            biallelic_genotype_matrix.append(var.genotypes.copy())
+
+    if len(biallelic_genotype_matrix) < 2:
+        return None  # need at least 2 sites for a pair
+    # Also count monomorphic sites
+    # Approximate: total sites in window = window_end - window_start
+    # Or use the actual site count if you have it
+    total_sites_in_window = window_end - window_start  # every base is a site
+
+
+    G = np.array(biallelic_genotype_matrix, dtype=np.int8)
+
+    # --- 2. Compute MAC directly ---
+    dac = G.sum(axis=1)
+    mac = np.minimum(dac, n - dac)
+    mac = mac[mac > 0]  # exclude monomorphic
+
+    if len(mac) < 2:
+        return None
+
+    # --- 3. Build folded 2SFS directly from MAC, upper triangle only ---
+    size = n // 2 + 1
+    sfs_2d_folded = np.zeros((size, size), dtype=np.int64)
+
+    """
+    for i in range(1, size):
+        ni = np.sum(mac == i)
+        if ni == 0:
+            continue
+        for j in range(i, size):  # upper triangle only
+            nj = np.sum(mac == j)
+            if nj == 0:
+                continue
+            if i == j:
+                count = ni * (ni - 1) // 2
+            else:
+                count = ni * nj
+            sfs_2d_folded[i, j] += count
+    """
+    num_sites = len(mac)
+    for i, j in itertools.combinations(range(num_sites), 2):
+        sfs_2d_folded[mac[i], mac[j]] += 1
+
+    # --- 4. Compute hiloPMI ---
+    total_pairs = sfs_2d_folded[1:, 1:].sum()
+    if total_pairs == 0:
+        return None
+
+    #eta_lo   = np.sum((mac >= 1) & (mac < ic)) 
+    #eta_hi   = np.sum(mac >= ic)
+    #eta_hilo = sfs_2d_folded[1:ic, ic:].sum() 
+
+    #eta_lo   = np.sum((mac >= 1) & (mac < ic)) / len(mac)
+    #eta_hi   = np.sum(mac >= ic) / len(mac)
+    #eta_hilo = sfs_2d_folded[1:ic, ic:].sum() / total_pairs
+    total_pairs = total_sites_in_window * (total_sites_in_window - 1) // 2
+
+    # eta_lo, eta_hi: fraction of ALL sites (including monomorphic)
+    eta_lo   = np.sum((mac >= 1) & (mac < ic)) / total_sites_in_window
+    eta_hi   = np.sum(mac >= ic) / total_sites_in_window
+
+    # eta_hilo: fraction of ALL pairs
+    eta_hilo = sfs_2d_folded[1:ic, ic:].sum() / total_pairs
+    if eta_lo == 0 or eta_hi == 0 or eta_hilo == 0:
+        return None
+    hilo_PMI = np.log(eta_hilo/(eta_lo * eta_hi))
+    return hilo_PMI, eta_hilo, eta_lo, eta_hi
+
 
 #--------------------
 #Alpha Functions
@@ -684,7 +793,7 @@ def alpha1_9(arg):
     
     global Ne_1_9
 
-    alpha = 1.9
+    alpha = 1.1
     Ne = Ne_1_9
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
@@ -1008,6 +1117,41 @@ def alpha1_9(arg):
             
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
             print(summary_statistics)
+
+
+
+            window_size = 100_000
+            genome_length = int(mts.sequence_length)
+            ic = 2  # singletons vs non-singletons; adjust as needed
+
+            results = []
+            for window_start in range(0, genome_length, window_size):
+                window_end = window_start + window_size
+                hilo_PMI, eta_hilo, eta_lo, eta_hi  = compute_window_hiloPMI(mts, n, window_start, window_end, ic=ic)
+                results.append({
+                    "window_start": window_start,
+                    "window_end":   window_end,
+                    "hilo_PMI":     hilo_PMI,
+                    "eta_hilo":     eta_hilo,
+                    "eta_lo":       eta_lo,
+                    "eta_hi":       eta_hi
+                })
+                print(f"[{window_start:>10} - {window_end:>10}] hilo_PMI = {hilo_PMI}, eta_hilo = {eta_hilo}, eta_lo = {eta_lo}, eta_hi = {eta_hi}")
+            valid_results = [r for r in results if r["eta_hilo"] is not None]
+
+            means = {key: np.mean([r[key] for r in valid_results]) for key in valid_results[0]}
+            print(means)
+
+            print(np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))
+            print("norm Taj D:",np.nanmean(result))
+            print((np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))/np.nanmean(result))
+
+            hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))
+            summary_statistics.append(hiloPMI) #148 HiloPMI
+
+            norm_hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))/np.nanmean(result)
+            summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
+
 
 
             return summary_statistics
@@ -2471,9 +2615,9 @@ final_df = pd.DataFrame(results)
 final_df.to_csv(file, index=False)"""
 
 worker_num = 8
-reps = 20000
+reps = 1
 functions = [alpha1_9, alpha1_7, alpha1_5, alpha1_3, alpha1_1]
-#functions = [alpha1_5, alpha1_3, alpha1_1]
+functions = [alpha1_9]
 results_buffer = []
 buffer_size = 5000   # write every 5k rows
 
@@ -2500,3 +2644,4 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
 if results_buffer:
     df = pd.DataFrame(results_buffer)
     df.to_csv(file, mode='a', index=False, header=not os.path.exists(file))
+

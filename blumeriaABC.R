@@ -9,7 +9,7 @@ library(ggplot2)
 setwd("~/PhD/Blumeria/")
 
 summary_table <- read.csv("summary_stats/growth/summary_statistics_contraction_mu5e-07_rho3.37e-07_2860_2900_unfoldedSFS.csv", header = TRUE)
-#summary_table2 <- read.csv("summary_stats/growth/summary_statistics_constant_mu5e-07_rho3.37e-07_2860_2900_unfoldedSFS.csv", header = TRUE)
+summary_table2 <- read.csv("summary_stats/growth/summary_statistics_constant_mu5e-07_rho3.37e-07_2860_2900_unfoldedSFS.csv", header = TRUE)
 
 
 
@@ -66,9 +66,10 @@ cv_rsq <- data1$std_r2 / data1$mean_r2
 cv_norm_Andersons_rsq <- data1$std_norm_AndR2 / data1$mean_norm_AndR2
 cv_norm_ILD <- data1$std_norm_ILD / data1$mean_norm_ILD
 cv_norm_rsq <- data1$std_norm_r2 / data1$mean_norm_r2
+cv_norm_D <- data1$std_norm_Taj_D / data1$mean_norm_Taj_D
 
 
-data1 <- cbind(data1, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq)
+data1 <- cbind(data1, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq, cv_norm_D)
 #data1 <- data1[, -c(23,32,39,47,55,63)]
 #data1 <- data1[ ,-c(2:6,14:20)]
 ###Remove Singletons
@@ -115,9 +116,10 @@ cv_rsq <- obs$std_r2 / obs$mean_r2
 cv_norm_Andersons_rsq <- obs$std_norm_AndR2 / obs$mean_norm_AndR2
 cv_norm_ILD <- obs$std_norm_ILD / obs$mean_norm_ILD
 cv_norm_rsq <- obs$std_norm_r2 / obs$mean_norm_r2
+cv_norm_D <- obs$std_norm_Taj_D / obs$mean_norm_Taj_D
 
 
-obs <- cbind(obs, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq)
+obs <- cbind(obs, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq, cv_norm_D)
 names(obs) <- names(subset(data1, select = -modindex))
 #obs <- obs[, -c(1:5, 13:19)]
 
@@ -188,7 +190,12 @@ ggplot(data1, aes(x = modindex, y = mean_D)) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
   labs(title = "Distribution of CV_norm_Andersons_r2", x = "model_index", y = "mean")
 
-ggplot(data1, aes(x = modindex, y = fSFS1)) +
+ggplot(data1, aes(x = modindex, y = AndR2_q0.5)) +
+  geom_boxplot(fill = "skyblue", outliers = FALSE) +
+  scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
+  labs(title = "Distribution of CV_norm_Andersons_r2", x = "model_index", y = "mean")
+
+ggplot(summary_table2, aes(x = as.factor(X0), y = X11)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
   labs(title = "Distribution of CV_norm_Andersons_r2", x = "model_index", y = "mean")
@@ -196,7 +203,7 @@ ggplot(data1, aes(x = modindex, y = fSFS1)) +
 
 
 
-curve(25000*exp(0.000001*x),
-      from = 0, to = 100000,
+curve(25000*exp(0.005*x),
+      from = 0, to = 1000,
       xlab = "Generations")
       
