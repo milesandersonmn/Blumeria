@@ -793,7 +793,7 @@ def alpha1_9(arg):
     
     global Ne_1_9
 
-    alpha = 1.1
+    alpha = 1.9
     Ne = Ne_1_9
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
@@ -902,11 +902,12 @@ def alpha1_9(arg):
             calculate_hamming(h = h, ploidy = 1, summary_statistics = summary_statistics) #38-45 Hamming stats
             print(len(summary_statistics))
             
+            """
             differences = calculate_homozygous_lengths(ts_chroms = ts_chroms, arr = arr)
 
             homozygous_quant = np.nanquantile(differences, [0.1,0.3,0.5,0.7,0.9])
 
-
+            
             summary_statistics.append(homozygous_quant[0]) #46-50 lengths of homozygosity quantiles
             summary_statistics.append(homozygous_quant[1])
             summary_statistics.append(homozygous_quant[2])
@@ -916,7 +917,7 @@ def alpha1_9(arg):
             #summary_statistics.append(scipy.stats.hmean(homozygous, nan_policy = 'omit'))   
             summary_statistics.append(np.nanvar(differences)) #52 var homozygosity
             summary_statistics.append(np.nanstd(differences)) #53 std homozygosity
-
+            """
 
             r2 = get_rsq_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
             r2_ge_1 = np.mean(r2 >= 1)
@@ -1153,6 +1154,15 @@ def alpha1_9(arg):
             summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
 
 
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result))
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result)**2)
+            window_hiloPMI_sq = np.nanmean([d["hilo_PMI"] for d in results]/result)**2
+            summary_statistics.append(window_hiloPMI_sq) #150 (HiloPMI per window normalized by norm_D)**2
+            #print((np.nanmean([d["hilo_PMI"] for d in results]/result)/np.nanstd([d["hilo_PMI"] for d in results]/result))**2)
+            
+            #print()
+
+
 
             return summary_statistics
             #return pd.DataFrame(summary_statistics).T
@@ -1276,11 +1286,13 @@ def alpha1_7(arg):
             calculate_hamming(h = h, ploidy = 1, summary_statistics = summary_statistics) #38-45 Hamming stats
             print(len(summary_statistics))
             
+
+            """
             differences = calculate_homozygous_lengths(ts_chroms = ts_chroms, arr = arr)
 
             homozygous_quant = np.nanquantile(differences, [0.1,0.3,0.5,0.7,0.9])
 
-
+            
             summary_statistics.append(homozygous_quant[0]) #46-50 lengths of homozygosity quantiles
             summary_statistics.append(homozygous_quant[1])
             summary_statistics.append(homozygous_quant[2])
@@ -1290,7 +1302,7 @@ def alpha1_7(arg):
             #summary_statistics.append(scipy.stats.hmean(homozygous, nan_policy = 'omit'))   
             summary_statistics.append(np.nanvar(differences)) #52 var homozygosity
             summary_statistics.append(np.nanstd(differences)) #53 std homozygosity
-
+            """
 
             r2 = get_rsq_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
             r2_ge_1 = np.mean(r2 >= 1)
@@ -1492,7 +1504,47 @@ def alpha1_7(arg):
             
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
             print(summary_statistics)                        
+            
+            window_size = 100_000
+            genome_length = int(mts.sequence_length)
+            ic = 2  # singletons vs non-singletons; adjust as needed
 
+            results = []
+            for window_start in range(0, genome_length, window_size):
+                window_end = window_start + window_size
+                hilo_PMI, eta_hilo, eta_lo, eta_hi  = compute_window_hiloPMI(mts, n, window_start, window_end, ic=ic)
+                results.append({
+                    "window_start": window_start,
+                    "window_end":   window_end,
+                    "hilo_PMI":     hilo_PMI,
+                    "eta_hilo":     eta_hilo,
+                    "eta_lo":       eta_lo,
+                    "eta_hi":       eta_hi
+                })
+                print(f"[{window_start:>10} - {window_end:>10}] hilo_PMI = {hilo_PMI}, eta_hilo = {eta_hilo}, eta_lo = {eta_lo}, eta_hi = {eta_hi}")
+            valid_results = [r for r in results if r["eta_hilo"] is not None]
+
+            means = {key: np.mean([r[key] for r in valid_results]) for key in valid_results[0]}
+            print(means)
+
+            print(np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))
+            print("norm Taj D:",np.nanmean(result))
+            print((np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))/np.nanmean(result))
+
+            hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))
+            summary_statistics.append(hiloPMI) #148 HiloPMI
+
+            norm_hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))/np.nanmean(result)
+            summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
+
+
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result))
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result)**2)
+            window_hiloPMI_sq = np.nanmean([d["hilo_PMI"] for d in results]/result)**2
+            summary_statistics.append(window_hiloPMI_sq) #150 (HiloPMI per window normalized by norm_D)**2
+            #print((np.nanmean([d["hilo_PMI"] for d in results]/result)/np.nanstd([d["hilo_PMI"] for d in results]/result))**2)
+            
+            #print()
             return summary_statistics
             #return pd.DataFrame(summary_statistics).T
             #x = DataFrame(summary_statistics).T
@@ -1634,11 +1686,12 @@ def alpha1_5(arg):
             calculate_hamming(h = h, ploidy = 1, summary_statistics = summary_statistics) #38-45 Hamming stats
             print(len(summary_statistics))
             
+            """
             differences = calculate_homozygous_lengths(ts_chroms = ts_chroms, arr = arr)
 
             homozygous_quant = np.nanquantile(differences, [0.1,0.3,0.5,0.7,0.9])
 
-
+            
             summary_statistics.append(homozygous_quant[0]) #46-50 lengths of homozygosity quantiles
             summary_statistics.append(homozygous_quant[1])
             summary_statistics.append(homozygous_quant[2])
@@ -1648,7 +1701,7 @@ def alpha1_5(arg):
             #summary_statistics.append(scipy.stats.hmean(homozygous, nan_policy = 'omit'))   
             summary_statistics.append(np.nanvar(differences)) #52 var homozygosity
             summary_statistics.append(np.nanstd(differences)) #53 std homozygosity
-
+            """
 
             r2 = get_rsq_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
             r2_ge_1 = np.mean(r2 >= 1)
@@ -1849,6 +1902,48 @@ def alpha1_5(arg):
             
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
             print(summary_statistics)
+
+            window_size = 100_000
+            genome_length = int(mts.sequence_length)
+            ic = 2  # singletons vs non-singletons; adjust as needed
+
+            results = []
+            for window_start in range(0, genome_length, window_size):
+                window_end = window_start + window_size
+                hilo_PMI, eta_hilo, eta_lo, eta_hi  = compute_window_hiloPMI(mts, n, window_start, window_end, ic=ic)
+                results.append({
+                    "window_start": window_start,
+                    "window_end":   window_end,
+                    "hilo_PMI":     hilo_PMI,
+                    "eta_hilo":     eta_hilo,
+                    "eta_lo":       eta_lo,
+                    "eta_hi":       eta_hi
+                })
+                print(f"[{window_start:>10} - {window_end:>10}] hilo_PMI = {hilo_PMI}, eta_hilo = {eta_hilo}, eta_lo = {eta_lo}, eta_hi = {eta_hi}")
+            valid_results = [r for r in results if r["eta_hilo"] is not None]
+
+            means = {key: np.mean([r[key] for r in valid_results]) for key in valid_results[0]}
+            print(means)
+
+            print(np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))
+            print("norm Taj D:",np.nanmean(result))
+            print((np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))/np.nanmean(result))
+
+            hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))
+            summary_statistics.append(hiloPMI) #148 HiloPMI
+
+            norm_hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))/np.nanmean(result)
+            summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
+
+
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result))
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result)**2)
+            window_hiloPMI_sq = np.nanmean([d["hilo_PMI"] for d in results]/result)**2
+            summary_statistics.append(window_hiloPMI_sq) #150 (HiloPMI per window normalized by norm_D)**2
+            #print((np.nanmean([d["hilo_PMI"] for d in results]/result)/np.nanstd([d["hilo_PMI"] for d in results]/result))**2)
+            
+            #print()
+
             return summary_statistics
             #return pd.DataFrame(summary_statistics).T
             #x = DataFrame(summary_statistics).T
@@ -1990,6 +2085,8 @@ def alpha1_3(arg):
             calculate_hamming(h = h, ploidy = 1, summary_statistics = summary_statistics) #38-45 Hamming stats
             print(len(summary_statistics))
             
+
+            """
             differences = calculate_homozygous_lengths(ts_chroms = ts_chroms, arr = arr)
 
             homozygous_quant = np.nanquantile(differences, [0.1,0.3,0.5,0.7,0.9])
@@ -2004,7 +2101,7 @@ def alpha1_3(arg):
             #summary_statistics.append(scipy.stats.hmean(homozygous, nan_policy = 'omit'))   
             summary_statistics.append(np.nanvar(differences)) #52 var homozygosity
             summary_statistics.append(np.nanstd(differences)) #53 std homozygosity
-
+            """
 
             r2 = get_rsq_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
             r2_ge_1 = np.mean(r2 >= 1)
@@ -2205,6 +2302,48 @@ def alpha1_3(arg):
             
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
             print(summary_statistics)
+
+            window_size = 100_000
+            genome_length = int(mts.sequence_length)
+            ic = 2  # singletons vs non-singletons; adjust as needed
+
+            results = []
+            for window_start in range(0, genome_length, window_size):
+                window_end = window_start + window_size
+                hilo_PMI, eta_hilo, eta_lo, eta_hi  = compute_window_hiloPMI(mts, n, window_start, window_end, ic=ic)
+                results.append({
+                    "window_start": window_start,
+                    "window_end":   window_end,
+                    "hilo_PMI":     hilo_PMI,
+                    "eta_hilo":     eta_hilo,
+                    "eta_lo":       eta_lo,
+                    "eta_hi":       eta_hi
+                })
+                print(f"[{window_start:>10} - {window_end:>10}] hilo_PMI = {hilo_PMI}, eta_hilo = {eta_hilo}, eta_lo = {eta_lo}, eta_hi = {eta_hi}")
+            valid_results = [r for r in results if r["eta_hilo"] is not None]
+
+            means = {key: np.mean([r[key] for r in valid_results]) for key in valid_results[0]}
+            print(means)
+
+            print(np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))
+            print("norm Taj D:",np.nanmean(result))
+            print((np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))/np.nanmean(result))
+
+            hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))
+            summary_statistics.append(hiloPMI) #148 HiloPMI
+
+            norm_hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))/np.nanmean(result)
+            summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
+
+
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result))
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result)**2)
+            window_hiloPMI_sq = np.nanmean([d["hilo_PMI"] for d in results]/result)**2
+            summary_statistics.append(window_hiloPMI_sq) #150 (HiloPMI per window normalized by norm_D)**2
+            #print((np.nanmean([d["hilo_PMI"] for d in results]/result)/np.nanstd([d["hilo_PMI"] for d in results]/result))**2)
+            
+            #print()
+
             return summary_statistics
             #return pd.DataFrame(summary_statistics).T
             #x = DataFrame(summary_statistics).T
@@ -2346,6 +2485,7 @@ def alpha1_1(arg):
             calculate_hamming(h = h, ploidy = 1, summary_statistics = summary_statistics) #38-45 Hamming stats
             print(len(summary_statistics))
             
+            """            
             differences = calculate_homozygous_lengths(ts_chroms = ts_chroms, arr = arr)
 
             homozygous_quant = np.nanquantile(differences, [0.1,0.3,0.5,0.7,0.9])
@@ -2361,6 +2501,7 @@ def alpha1_1(arg):
             summary_statistics.append(np.nanvar(differences)) #52 var homozygosity
             summary_statistics.append(np.nanstd(differences)) #53 std homozygosity
 
+            """
 
             r2 = get_rsq_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
             r2_ge_1 = np.mean(r2 >= 1)
@@ -2562,6 +2703,47 @@ def alpha1_1(arg):
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
             print(summary_statistics)                        
 
+            window_size = 100_000
+            genome_length = int(mts.sequence_length)
+            ic = 2  # singletons vs non-singletons; adjust as needed
+
+            results = []
+            for window_start in range(0, genome_length, window_size):
+                window_end = window_start + window_size
+                hilo_PMI, eta_hilo, eta_lo, eta_hi  = compute_window_hiloPMI(mts, n, window_start, window_end, ic=ic)
+                results.append({
+                    "window_start": window_start,
+                    "window_end":   window_end,
+                    "hilo_PMI":     hilo_PMI,
+                    "eta_hilo":     eta_hilo,
+                    "eta_lo":       eta_lo,
+                    "eta_hi":       eta_hi
+                })
+                print(f"[{window_start:>10} - {window_end:>10}] hilo_PMI = {hilo_PMI}, eta_hilo = {eta_hilo}, eta_lo = {eta_lo}, eta_hi = {eta_hi}")
+            valid_results = [r for r in results if r["eta_hilo"] is not None]
+
+            means = {key: np.mean([r[key] for r in valid_results]) for key in valid_results[0]}
+            print(means)
+
+            print(np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))
+            print("norm Taj D:",np.nanmean(result))
+            print((np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"])))/np.nanmean(result))
+
+            hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))
+            summary_statistics.append(hiloPMI) #148 HiloPMI
+
+            norm_hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))/np.nanmean(result)
+            summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
+
+
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result))
+            print(np.nanmean([d["hilo_PMI"] for d in results]/result)**2)
+            window_hiloPMI_sq = np.nanmean([d["hilo_PMI"] for d in results]/result)**2
+            summary_statistics.append(window_hiloPMI_sq) #150 (HiloPMI per window normalized by norm_D)**2
+            #print((np.nanmean([d["hilo_PMI"] for d in results]/result)/np.nanstd([d["hilo_PMI"] for d in results]/result))**2)
+            
+            #print()
+
             return summary_statistics
             #return pd.DataFrame(summary_statistics).T
             #x = DataFrame(summary_statistics).T
@@ -2614,10 +2796,10 @@ final_df = pd.DataFrame(results)
 # Write once
 final_df.to_csv(file, index=False)"""
 
-worker_num = 8
+worker_num = 1
 reps = 1
 functions = [alpha1_9, alpha1_7, alpha1_5, alpha1_3, alpha1_1]
-functions = [alpha1_9]
+#functions = [alpha1_9]
 results_buffer = []
 buffer_size = 5000   # write every 5k rows
 
