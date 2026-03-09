@@ -9,7 +9,7 @@ import itertools
 import matplotlib.pyplot as plt
 
 import os
-os.chdir("/Users/milesanderson/PhD/Blumeria/summary_stats/growth")
+os.chdir("/Users/milesanderson/PhD/Blumeria/summary_stats/")
 
 # -------------------
 # Ne Parameters per Alpha value
@@ -32,7 +32,7 @@ mu = 5e-7
 r_chrom = 3.37e-7
 #file = "summary_statistics_growth_mu5e-7_rho3e-7_2860_2900_unfoldedSFS.csv"
 file = (
-    f"summary_statistics_test_"
+    f"summary_statistics_"
     f"mu{mu:.0e}_rho{r_chrom:.2e}_"
     f"{target_min}_{target_max}_unfoldedSFS.csv"
 )
@@ -40,10 +40,10 @@ file = (
 #growth_rate_high = 0.005
 exclude_ac_below = 2
 ploidy = 1
-growth_rate_low = 0
-growth_rate_high = 0
-#growth_rate_high = -0.000001
-#growth_rate_low = -0.0001
+#growth_rate_low = 0
+#growth_rate_high = 0
+growth_rate_high = -0.000001
+growth_rate_low = -0.01
 #growth_rate_high = 0.005
 #growth_rate_low = -0.005
 
@@ -2796,10 +2796,10 @@ final_df = pd.DataFrame(results)
 # Write once
 final_df.to_csv(file, index=False)"""
 
-worker_num = 1
-reps = 1
-functions = [alpha1_9, alpha1_7, alpha1_5, alpha1_3, alpha1_1]
-#functions = [alpha1_9]
+worker_num = 8
+reps = 20000
+#functions = [alpha1_9, alpha1_7, alpha1_5, alpha1_3, alpha1_1]
+functions = [alpha1_1]
 results_buffer = []
 buffer_size = 5000   # write every 5k rows
 
@@ -2811,7 +2811,9 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
     for future in concurrent.futures.as_completed(futures):
         try:
             result = future.result()
-            results_buffer.append(result)
+            if result is not None:
+                results_buffer.append(result)
+            
 
             # Flush periodically
             if len(results_buffer) >= buffer_size:
