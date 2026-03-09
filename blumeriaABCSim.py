@@ -43,7 +43,7 @@ ploidy = 1
 #growth_rate_low = 0
 #growth_rate_high = 0
 growth_rate_high = -0.000001
-growth_rate_low = -0.01
+growth_rate_low = -0.00009
 #growth_rate_high = 0.005
 #growth_rate_low = -0.005
 
@@ -797,6 +797,9 @@ def alpha1_9(arg):
     Ne = Ne_1_9
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
+    mag_a = abs(min(growth_rate_high, growth_rate_low))
+    mag_b = abs(max(growth_rate_high, growth_rate_low))
+    growth_rate = -math.exp(np.random.uniform(math.log(abs(mag_a)), math.log(abs(mag_b))))
     print("growth rate:", growth_rate)
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
@@ -1153,7 +1156,8 @@ def alpha1_9(arg):
             norm_hiloPMI = np.log(means["eta_hilo"]/(means["eta_lo"] * means["eta_hi"]))/np.nanmean(result)
             summary_statistics.append(norm_hiloPMI) #149 Tajima's D normed HiloPMI
 
-
+            print("hiloPMI", [d["hilo_PMI"] for d in results])
+            print("norm D", result)
             print(np.nanmean([d["hilo_PMI"] for d in results]/result))
             print(np.nanmean([d["hilo_PMI"] for d in results]/result)**2)
             window_hiloPMI_sq = np.nanmean([d["hilo_PMI"] for d in results]/result)**2
@@ -1181,6 +1185,9 @@ def alpha1_7(arg):
     Ne = Ne_1_7
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
+    mag_a = abs(min(growth_rate_high, growth_rate_low))
+    mag_b = abs(max(growth_rate_high, growth_rate_low))
+    growth_rate = -math.exp(np.random.uniform(math.log(abs(mag_a)), math.log(abs(mag_b))))
     print("growth rate:", growth_rate)
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
@@ -1581,6 +1588,9 @@ def alpha1_5(arg):
     rate_map = msprime.RateMap(position=map_positions, rate=rates) #Rate map for separate chromosomes
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
+    mag_a = abs(min(growth_rate_high, growth_rate_low))
+    mag_b = abs(max(growth_rate_high, growth_rate_low))
+    growth_rate = -math.exp(np.random.uniform(math.log(abs(mag_a)), math.log(abs(mag_b))))
     print("growth rate:", growth_rate)
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
@@ -1980,6 +1990,9 @@ def alpha1_3(arg):
     rate_map = msprime.RateMap(position=map_positions, rate=rates) #Rate map for separate chromosomes
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
+    mag_a = abs(min(growth_rate_high, growth_rate_low))
+    mag_b = abs(max(growth_rate_high, growth_rate_low))
+    growth_rate = -math.exp(np.random.uniform(math.log(abs(mag_a)), math.log(abs(mag_b))))
     print("growth rate:", growth_rate)
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
@@ -2380,6 +2393,9 @@ def alpha1_1(arg):
     rate_map = msprime.RateMap(position=map_positions, rate=rates) #Rate map for separate chromosomes
 
     growth_rate = np.random.uniform(low = growth_rate_low, high = growth_rate_high)
+    mag_a = abs(min(growth_rate_high, growth_rate_low))
+    mag_b = abs(max(growth_rate_high, growth_rate_low))
+    growth_rate = -math.exp(np.random.uniform(math.log(abs(mag_a)), math.log(abs(mag_b))))
     print("growth rate:", growth_rate)
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
@@ -2751,7 +2767,7 @@ def alpha1_1(arg):
             #x.to_csv(file, index = False, mode = 'a', header = False)
             
 
-            break
+            
 
 
 
@@ -2798,10 +2814,11 @@ final_df.to_csv(file, index=False)"""
 
 worker_num = 8
 reps = 20000
+
 #functions = [alpha1_9, alpha1_7, alpha1_5, alpha1_3, alpha1_1]
-functions = [alpha1_1]
+functions = [alpha1_9]
 results_buffer = []
-buffer_size = 5000   # write every 5k rows
+buffer_size = 50   # write every 5k rows
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
     futures = [executor.submit(func, i)
