@@ -26,8 +26,8 @@ header <- c( "modindex",
             "fSFS1", "fSFS2", "fSFS3", 
             "fSFS4", "fSFS5", "fSFS6", "fSFS7", "fSFS8",
             "fSFS9", "fSFS10", "fSFS11", "fSFS12", "fSFS13",
-            "fSFS14", "fSFS15", "AFS_q0.1", "AFS_q0.3", "AFS_q0.5",
-            "AFS_q0.7", "AFS_q0.9", "mean_D", "var_D", "std_D",
+            "fSFS14", "fSFS15", "AFS_q0.1", "AFS_q0.3", "AFS_q0.5", "AFS_q0.7", "AFS_q0.9", 
+            "mean_D", "var_D", "std_D",
             "ham_q0.1", "ham_q0.3",
             "ham_q0.5", "ham_q0.7",
             "ham_q0.9", "mean_ham", "std_ham", "var_ham",
@@ -84,6 +84,8 @@ data1 <- data1[, !grepl("hiloPMI", colnames(data1))]
 data1 <- data1[, !grepl("fSFS1", colnames(data1))]
 data1 <- data1[, !grepl("fSFS", colnames(data1))]
 data1 <- data1[, !grepl("AFS", colnames(data1))]
+data1 <- data1[, !grepl("_D", colnames(data1))]
+data1 <- data1[, !grepl("And", colnames(data1))]
 
 
 
@@ -135,6 +137,9 @@ single_double_ratio <- obs$fSFS1 / obs$fSFS2
 obs <- cbind(obs, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq, cv_norm_D)
 obs <- obs[, !grepl("fSFS", colnames(obs))]
 obs <- obs[, !grepl("AFS", colnames(obs))]
+obs <- obs[, !grepl("_D", colnames(obs))]
+obs <- obs[, !grepl("And", colnames(obs))]
+
 
 #names(obs) <- names(subset(data1, select = -modindex))
 #obs <- obs[, -c(1:5, 13:19)]
@@ -144,7 +149,7 @@ prediction
 
 
 
-ggplot(data1, aes(x = modindex, y = mean_norm_Taj_D)) +
+ggplot(data1, aes(x = modindex, y = r2_q0.99)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
   labs(title = "Distribution of std_AndR2", x = "model_index", y = "std")
