@@ -33,13 +33,14 @@ file = (
     f"{target_min}_{target_max}_unfoldedSFS.csv"
 )
 """
-file = "test_simplified_script.csv"
+file = "test_weighted_r2.csv"
 
 exclude_ac_below = 2
 ploidy = 1
 
 growth_rate_high = -0.000001
 growth_rate_low = -0.00001
+
 
 
 r_break = math.log(2) #Recombination rate needed to satisfy probability 2^-t inheritance of two chromosomes
@@ -79,6 +80,22 @@ def sim_summary_stats(alpha):
     while True:
         attempt += 1
         ts = helper_functions.instantiate_ts(alpha = alpha, initial_size = Ne, growth_rate = growth_rate, sample_size = sample_size, rate_map = rate_map)
+        
+        #Bottleneck tester
+        """
+        demography = msprime.Demography()
+        demography.add_population(initial_size=Ne)
+        demography.add_instantaneous_bottleneck(time=200, strength=5000, population=0)
+
+        ts = msprime.sim_ancestry(        
+        samples = sample_size,
+        demography=demography,
+        recombination_rate = rate_map,
+        model=msprime.BetaCoalescent(alpha = alpha),
+        ploidy=ploidy
+        )
+        """
+
         mts = helper_functions.mutation_model(ts = ts, mu = mu)
         S = mts.num_sites
         
@@ -87,7 +104,7 @@ def sim_summary_stats(alpha):
         if target_max < S:
             Ne = (target_max/S)*Ne
         if target_min <= S <= target_max:
-            print(f"Accepted on attempt {attempt}: S = {S}; Ne = {Ne}")
+            #print(f"Accepted on attempt {attempt}: S = {S}; Ne = {Ne}")
             Ne = Ne
             np.set_printoptions(legacy="1.21") #exclude dbtype from np arrays
             summary_statistics = [] #Initialize list of summary statistics
@@ -130,8 +147,7 @@ def sim_summary_stats(alpha):
             afs = mts.allele_frequency_spectrum(span_normalise=False, polarised=True)
 
             afs_entries = helper_functions.add_sfs_summary(afs = afs, sample_size = sample_size, summary_statistics = summary_statistics) #12:26 SFS
-            print("Summary stat length = ",len(summary_statistics))
-            print(summary_statistics)
+            
 
             afs_quant = np.quantile(afs_entries, [0.1, 0.3, 0.5, 0.7, 0.9])
             summary_statistics.append(afs_quant[0]) #27 AFS quantile 0.1
@@ -152,28 +168,27 @@ def sim_summary_stats(alpha):
                 start, end = chrom_positions[j: j + 2]
                 chrom_ts = mts.keep_intervals([[start, end]], simplify=False).trim()
                 ts_chroms.append(chrom_ts)
-                print(chrom_ts.sequence_length)
+                #print(chrom_ts.sequence_length)
 
 
 
             s, s_norm, mask = helper_functions.calculate_r2(mts = mts, exclude_ac_below = exclude_ac_below, sample_size = sample_size)
             
-            print("calculated r2")
+            
 
             arr = mts.sites_position #array of site positions
 
             h = allel.HaplotypeArray(mts.genotype_matrix())
-            print("Haplotypes...", h)
-            print("to genotypes...", h.to_genotypes(ploidy=1))
+            
 
-            print("Calculating hamming distance...")
+          
             helper_functions.calculate_hamming(h = h, ploidy = 1, summary_statistics = summary_statistics) #38-45 Hamming stats
-            print(len(summary_statistics))
+           
             
 
             r2 = helper_functions.get_rsq_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
             r2_ge_1 = np.mean(r2 >= 1)
-            print("Fraction of r2 values >= 1:", r2_ge_1)
+            
             r2_quant = np.nanquantile(r2, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
 
@@ -188,18 +203,14 @@ def sim_summary_stats(alpha):
             summary_statistics.append(np.nanvar(r2)) #60 var r^2
             summary_statistics.append(np.nanstd(r2)) #61 std r^2
             summary_statistics.append(r2_ge_1)
-            print(r2)
-            print(len(r2))
-            print(len(r2[r2 != 0]))
-            print(len(summary_statistics))
+           
 
 
             ild_all = helper_functions.get_ILD(mask = mask, ts_chroms = ts_chroms, s = s)
             ild_ge_1 = np.mean(ild_all >= 1)
-            print("Fraction of ILD values >= 1:", ild_ge_1)
+            
             ild_quant = np.nanquantile(ild_all, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
-            print(ild_all)
-            print("ILD")
+          
             
 
             summary_statistics.append(ild_quant[0]) #62-66 ILD quantiles
@@ -213,11 +224,9 @@ def sim_summary_stats(alpha):
             summary_statistics.append(np.nanvar(ild_all)) #68 var ILD
             summary_statistics.append(np.nanstd(ild_all)) #69 std ILD
             summary_statistics.append(ild_ge_1)
-            print(len(summary_statistics))
+            
 
-            print(ild_all)
-            print(len(ild_all))
-            print(len(ild_all[ild_all != 0]))
+         
             
 
             scaled_r2 = helper_functions.calculate_Anderson_rsq(mask = mask, ts_chroms = ts_chroms, s = s)
@@ -235,12 +244,12 @@ def sim_summary_stats(alpha):
             summary_statistics.append(np.nanmean(scaled_r2))
             summary_statistics.append(np.nanvar(scaled_r2))
             summary_statistics.append(np.nanstd(scaled_r2))
-            print(len(summary_statistics))
+       
 
 
             r2_norm = helper_functions.get_rsq_norm_per_chromosome(mask = mask, ts_chroms = ts_chroms, r2_norm = s_norm)
             r2_norm_ge_1 = np.mean(r2_norm >= 1)
-            print("Fraction of r2_norm values >= 1:", r2_norm_ge_1)
+           
             r2_norm_quant = np.nanquantile(r2_norm, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
 
@@ -255,11 +264,11 @@ def sim_summary_stats(alpha):
             summary_statistics.append(np.nanvar(r2_norm))
             summary_statistics.append(np.nanstd(r2_norm))
             summary_statistics.append(r2_norm_ge_1)
-            print(len(summary_statistics))     
+                
 
             ild_norm_all = helper_functions.get_ILD_norm(mask = mask, ts_chroms = ts_chroms, r2_norm = s_norm)  
             ild_norm_ge_1 = np.mean(ild_norm_all >= 1)
-            print("Fraction of ild_norm values >= 1:", ild_norm_ge_1)     
+               
             ild_norm_all_quant = np.nanquantile(ild_norm_all, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
 
@@ -274,7 +283,7 @@ def sim_summary_stats(alpha):
             summary_statistics.append(np.nanvar(ild_norm_all))
             summary_statistics.append(np.nanstd(ild_norm_all))
             summary_statistics.append(ild_norm_ge_1)
-            print(len(summary_statistics)) 
+           
 
             scaled_r2_norm = helper_functions.calculate_Anderson_rsq_norm(mask, ts_chroms, r2_norm = s_norm) 
             scaled_r2_norm_quant = np.nanquantile(scaled_r2_norm, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
@@ -291,7 +300,7 @@ def sim_summary_stats(alpha):
             summary_statistics.append(np.nanvar(scaled_r2_norm))
             summary_statistics.append(np.nanstd(scaled_r2_norm))               
             
-            """
+            
             samples = mts.samples()
             n = len(samples)
 
@@ -331,15 +340,14 @@ def sim_summary_stats(alpha):
                             (theta_pi - theta_w) / theta_pi,
                             np.nan)
 
-            print(result)
-            print(np.mean(result))
+          
             summary_statistics.append(np.nanmean(result)) #102-103 normalized Tajima's D
             summary_statistics.append(np.nanstd(result))
 
             #Clip r^2 values greater than 1
             r2 = np.clip(r2, 0, 1)
             proportions = np.histogram(r2, bins=np.arange(0, 1.1, 0.1))[0] / len(r2)
-            print(proportions)
+           
 
             summary_statistics.extend(proportions) #104-113 LD Frequency spectrum
             
@@ -349,7 +357,7 @@ def sim_summary_stats(alpha):
             ild_all = np.clip(ild_all, 0, 1)
 
             proportions = np.histogram(ild_all, bins=np.arange(0, 1.1, 0.1))[0] / len(ild_all)
-            print(proportions) 
+           
             summary_statistics.extend(proportions) #115-124 ILD Frequency spectrum
             
             summary_statistics.append(proportions[0]-proportions[9]) #125 is difference between unlinked and fully linked frequencies
@@ -358,21 +366,46 @@ def sim_summary_stats(alpha):
             r2_norm = np.clip(r2_norm, 0, 1) 
 
             proportions = np.histogram(r2_norm, bins=np.arange(0, 1.1, 0.1))[0] / len(r2_norm)
-            print(proportions) 
+            
             summary_statistics.extend(proportions) #126-135 ILD Frequency spectrum
             
             summary_statistics.append(proportions[0]-proportions[9]) #136 is difference between unlinked and fully linked frequencies
 
             ild_norm_all = np.clip(ild_norm_all, 0, 1)
             proportions = np.histogram(ild_norm_all, bins=np.arange(0, 1.1, 0.1))[0] / len(ild_norm_all)
-            print(proportions) 
+            
             summary_statistics.extend(proportions) #137-146 ILD Frequency spectrum
             
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
+         
+
+            weighted_r2_stats = helper_functions.get_weighted_rsq_stats_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
+ 
+            summary_statistics.extend([
+                weighted_r2_stats['weighted_quantiles'][0.1],
+                weighted_r2_stats['weighted_quantiles'][0.3],
+                weighted_r2_stats['weighted_quantiles'][0.5],
+                weighted_r2_stats['weighted_quantiles'][0.7],
+                weighted_r2_stats['weighted_quantiles'][0.9],
+                weighted_r2_stats['weighted_mean'],
+                weighted_r2_stats['weighted_std']
+            ])
+
+
+            weighted_norm_r2_stats = helper_functions.get_weighted_rsq_stats_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s_norm)
+ 
+            summary_statistics.extend([
+                weighted_norm_r2_stats['weighted_quantiles'][0.1],
+                weighted_norm_r2_stats['weighted_quantiles'][0.3],
+                weighted_norm_r2_stats['weighted_quantiles'][0.5],
+                weighted_norm_r2_stats['weighted_quantiles'][0.7],
+                weighted_norm_r2_stats['weighted_quantiles'][0.9],
+                weighted_norm_r2_stats['weighted_mean'],
+                weighted_norm_r2_stats['weighted_std']
+            ])
             print(summary_statistics)
 
-
-
+            """
             window_size = 100_000
             genome_length = int(mts.sequence_length)
             ic = 2  # singletons vs non-singletons; adjust as needed
@@ -428,8 +461,9 @@ def sim_summary_stats(alpha):
         
 import concurrent.futures
 worker_num = 8
-reps = 50
+reps = 100
 alpha_values = [1.9, 1.7, 1.5, 1.3, 1.1]
+alpha_values = [1.3, 1.1]
 
 functions = [sim_summary_stats]
 results_buffer = []

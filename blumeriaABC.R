@@ -69,17 +69,22 @@ cv_norm_ILD <- data1$std_norm_ILD / data1$mean_norm_ILD
 cv_norm_rsq <- data1$std_norm_r2 / data1$mean_norm_r2
 cv_norm_D <- data1$std_norm_Taj_D / data1$mean_norm_Taj_D
 single_double_ratio <- data1$fSFS1 / data1$fSFS2
+ZnS <- data1$mean_ILD - data1$mean_r2
+psi <- data1$mean_r2 / data1$mean_ILD
+psi_ratio <- data1$psi / data1$single_double_ratio
 
+data1 <- cbind(data1, single_double_ratio)
+data1 <- cbind(data1, psi_ratio)
+data1 <- cbind(data1, psi)
+data1 <- cbind(data1, ZnS)
 data1 <- cbind(data1, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq, cv_norm_D)
 
 ggplot(data1, aes(x = modindex, y = AFS_q0.5)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
   labs(title = "Distribution of std_AndR2", x = "model_index", y = "std")
-#data1 <- data1[, -c(23,32,39,47,55,63)]
-#data1 <- data1[ ,-c(2:6,14:20)]
-###Remove Singletons
-#data1 <- data1[ ,-c(2)]
+
+
 data1 <- data1[, !grepl("hiloPMI", colnames(data1))]
 data1 <- data1[, !grepl("fSFS1", colnames(data1))]
 data1 <- data1[, !grepl("fSFS", colnames(data1))]
@@ -92,7 +97,7 @@ data1 <- data1[, !grepl("And", colnames(data1))]
 model.rf1 <- abcrf(modindex~., data = data1, lda = FALSE)
 model.rf1
 conf_mat <- model.rf1$model.rf$confusion.matrix
-err.abcrf(model.rf1, data1)
+#err.abcrf(model.rf1, data1)
 
 pheatmap(conf_mat[,1:5], 
          display_numbers = TRUE, 
@@ -116,12 +121,8 @@ plot(model.rf1, data1, n.var = 35)
 model.rf1$model.rf$variable.importance
 sort(model.rf1$model.rf$variable.importance)
 
-#head(summary_table)
-#obs <- txt[c(20000,43000,65000,83000,110000, 16000, 45000, 67000, 90000, 120000), -1]
 
 obs <- read.csv("observed_sum_stats.csv", header = TRUE)
-#obs <- obs[, -c(1:11)]
-#obs <- obs[, -c(23,27,35,43,51,59,67)]
 colnames(obs) <- header[-1]
 
 cv_Andersons_rsq <- obs$std_AndR2 / obs$mean_AndR2
@@ -131,7 +132,12 @@ cv_norm_Andersons_rsq <- obs$std_norm_AndR2 / obs$mean_norm_AndR2
 cv_norm_ILD <- obs$std_norm_ILD / obs$mean_norm_ILD
 cv_norm_rsq <- obs$std_norm_r2 / obs$mean_norm_r2
 cv_norm_D <- obs$std_norm_Taj_D / obs$mean_norm_Taj_D
-single_double_ratio <- obs$fSFS1 / obs$fSFS2
+single_double_ratio_obs <- obs$fSFS1 / obs$fSFS2
+ZnS_obs <- obs$mean_ILD - obs$mean_r2
+psi_obs <- obs$mean_r2 / obs$mean_ILD
+psi_ratio_obs <- psi_obs / single_double_ratio
+
+
 
 
 obs <- cbind(obs, cv_Andersons_rsq, cv_ILD, cv_rsq, cv_norm_Andersons_rsq, cv_norm_ILD, cv_norm_rsq, cv_norm_D)
@@ -149,12 +155,25 @@ prediction
 
 
 
-ggplot(data1, aes(x = modindex, y = r2_q0.99)) +
+ggplot(data1, aes(x = modindex, y = psi_ratio)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
-  labs(title = "Distribution of std_AndR2", x = "model_index", y = "std")
+  labs(title = "Distribution of std_AndR2", x = "model_index", y = "std")+
+  geom_hline(yintercept = psi_ratio_obs, color = "red")
 
-ggplot(data1, aes(x = modindex, y = mean_AndR2)) +
+ggplot(data1, aes(x = modindex, y = psi)) +
+  geom_boxplot(fill = "skyblue", outliers = FALSE) +
+  scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
+  labs(title = "Distribution of std_AndR2", x = "model_index", y = "std")+
+  geom_hline(yintercept = psi_obs, color = "red")
+
+ggplot(data1, aes(x = modindex, y = single_double_ratio)) +
+  geom_boxplot(fill = "skyblue", outliers = FALSE) +
+  scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
+  labs(title = "Distribution of std_AndR2", x = "model_index", y = "std")+
+  geom_hline(yintercept = single_double_ratio_obs, color = "red")
+
+ggplot(data1, aes(x = modindex, y = fSFS1)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
   labs(title = "Distribution of mean_AndR2", x = "model_index", y = "mean")
@@ -162,7 +181,14 @@ ggplot(data1, aes(x = modindex, y = mean_AndR2)) +
 ggplot(data1, aes(x = modindex, y = std_r2)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
-  labs(title = "Distribution of std_r2", x = "model_index", y = "std")
+  labs(title = "Distribution of std_r2", x = "model_index", y = "std")+
+  geom_hline(yintercept = obs$std_r2, color = "red")
+
+ggplot(data1, aes(x = modindex, y = mean_r2)) +
+  geom_boxplot(fill = "skyblue", outliers = FALSE) +
+  scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
+  labs(title = "Distribution of mean_r2", x = "model_index", y = "std")+
+  geom_hline(yintercept = obs$mean_r2, color = "red")
 
 ggplot(data1, aes(x = modindex, y = std_ILD)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
@@ -192,7 +218,8 @@ ggplot(data1, aes(x = modindex, y = cv_norm_rsq)) +
 ggplot(data1, aes(x = modindex, y = cv_rsq)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +
   scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
-  labs(title = "Distribution of CV_r2", x = "model_index", y = "mean")
+  labs(title = "Distribution of CV_r2", x = "model_index", y = "mean") +
+  geom_hline(yintercept = obs$cv_rsq, color = "red")
 
 ggplot(data1, aes(x = modindex, y = cv_norm_Andersons_rsq)) +
   geom_boxplot(fill = "skyblue", outliers = FALSE) +

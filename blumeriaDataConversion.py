@@ -50,6 +50,25 @@ def add_sfs_summary(afs, sample_size, summary_statistics):
     # bin 15+
     summary_statistics.append(afs[15:].sum() / total)
 
+    freqs = np.arange(1, len(afs)) / sample_size
+    values = afs[1:] / afs.sum()
+    import matplotlib.pyplot as plt
+    """
+    plt.plot(freqs, values)
+    plt.xlabel("Allele Frequency")
+    plt.ylabel("Proportion of SNPs")
+    plt.show()
+    """
+    freqs = np.arange(1, len(afs)) / sample_size
+    values = afs[1:] / afs.sum()
+
+    plt.scatter(freqs, values)
+
+    plt.xlabel("Allele Frequency")
+    plt.ylabel("Proportion of SNPs")
+    plt.title("Site Frequency Spectrum")
+
+    plt.show()
     return afs_entries
 
 def calculate_hamming(h, ploidy, summary_statistics):
