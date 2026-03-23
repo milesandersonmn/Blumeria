@@ -276,10 +276,10 @@ def get_rsq_norm_per_chromosome(mask, chrom, r2_norm):
 
 
 
-    r2_norm = np.concatenate((chrom1_ld, chrom2_ld, chrom3_ld))
+    s_norm = np.concatenate((chrom1_ld, chrom2_ld, chrom3_ld))
     print("max R2 norm:")
-    print(max(r2_norm))
-    return r2_norm
+    print(max(s_norm))
+    return s_norm
 
 ######Get ILD
 
@@ -542,6 +542,98 @@ def calculate_Anderson_rsq_norm(mask, chrom, pos, r2_norm):
 
     return scaled_r2_norm
 
+def get_weighted_rsq_stats_per_chromosome(mask, pos, chrom, s, quantiles=[0.1, 0.3, 0.5, 0.7, 0.9]):
+
+    def weighted_quantiles(values, weights, quantiles):
+        sorter = np.argsort(values)
+        sorted_vals = values[sorter]
+        sorted_weights = weights[sorter]
+        cumulative_weights = np.cumsum(sorted_weights)
+        cumulative_weights /= cumulative_weights[-1]
+        return np.interp(quantiles, cumulative_weights, sorted_vals)
+
+    def weighted_stats(r2_adj, dist_adj, quantiles):
+        weights = 1 / dist_adj
+        weighted_mean = np.sum(weights * r2_adj) / np.sum(weights)
+        V1 = np.sum(weights)
+        V2 = np.sum(weights**2)
+        weighted_var = (V1 / (V1**2 - V2)) * np.sum(weights * (r2_adj - weighted_mean)**2)
+        weighted_std = np.sqrt(weighted_var)
+        wq = weighted_quantiles(r2_adj, weights, quantiles)
+        return weighted_mean, weighted_std, wq
+
+    def unweighted_stats(r2_adj, quantiles):
+        mean = np.mean(r2_adj)
+        std = np.std(r2_adj, ddof=1)
+        uq = np.quantile(r2_adj, quantiles)
+        return mean, std, uq
+
+    # Split mask per chromosome
+    unique_chrom, counts = np.unique(chrom, return_counts=True)
+
+    for c, n in zip(unique_chrom, counts):
+        print(f"{c}: {n} sites")
+
+    print(counts)
+    mask_chrom1 = mask[:counts[0]]
+
+    mask_chrom2 = mask[counts[0]:counts[0]+counts[1]]
+    
+    mask_chrom3 = mask[counts[0]+counts[1]:counts[0]+counts[1]+counts[2]]
+    # Mutation counts per chromosome
+
+
+    chrom1_mut_num = counts[0] - np.sum(mask_chrom1 != True)
+    chrom2_mut_num = counts[1] - np.sum(mask_chrom2 != True)
+    chrom3_mut_num = counts[2] - np.sum(mask_chrom3 != True)
+
+    print(chrom1_mut_num, chrom2_mut_num, chrom3_mut_num, len(r2_norm))
+    chrom1and2_mut_num = chrom1_mut_num + chrom2_mut_num
+    total_mut_num = chrom1_mut_num + chrom2_mut_num + chrom3_mut_num
+    # Slice r2 matrix and compute adjacent distances per chromosome
+    all_r2 = []
+    all_dist = []
+    for unique_chrom, mask_chrom, start, end in zip(
+        unique_chrom,
+        [mask_chrom1, mask_chrom2, mask_chrom3],
+        [0, chrom1_mut_num, chrom1and2_mut_num],
+        [chrom1_mut_num, chrom1and2_mut_num, total_mut_num]
+    ):
+        ld_mat = s[start:end, start:end]
+        n = ld_mat.shape[0]
+        adj_idx = (np.arange(n-1), np.arange(1, n))
+        all_r2.append(ld_mat[adj_idx])
+
+        # Compute adjacent distances directly from site positions
+        positions = pos[chrom == unique_chrom][mask_chrom]
+        all_dist.append(np.diff(positions))
+
+    # Combine across chromosomes and filter zero distances
+    all_r2 = np.concatenate(all_r2)
+    all_dist = np.concatenate(all_dist)
+    valid = all_dist > 0
+    all_r2, all_dist = all_r2[valid], all_dist[valid]
+
+    mean, std, wq = weighted_stats(all_r2, all_dist, quantiles)
+    umean, ustd, uq = unweighted_stats(all_r2, quantiles)
+
+    print("weighted average r2:", mean)
+    print("weighted std r2:", std)
+    print("weighted quantiles r2:", wq)
+    print("unweighted average r2:", umean)
+    print("unweighted std r2:", ustd)
+    print("unweighted quantiles r2:", uq)
+
+    return {
+        'weighted_mean': mean,
+        'weighted_std': std,
+        'weighted_quantiles': dict(zip(quantiles, wq)),
+        'unweighted_mean': umean,
+        'unweighted_std': ustd,
+        'unweighted_quantiles': dict(zip(quantiles, uq))
+    }
+
+
 
 np.set_printoptions(legacy="1.21") #exclude dbtype from np arrays
 summary_statistics = [] #Initialize list of summary statistics
@@ -738,6 +830,7 @@ arr_chrom1 = pos[chrom == unique_chrom[0]]
 print("Arr_chrom:",arr_chrom1)
 print(len(arr_chrom1))
 
+"""
 scaled_r2 = calculate_Anderson_rsq(mask = mask, chrom = chrom, pos = pos, s = s)
 scaled_r2_quant = np.nanquantile(scaled_r2, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
@@ -755,7 +848,7 @@ summary_statistics.append(np.nanvar(scaled_r2))
 summary_statistics.append(np.nanstd(scaled_r2))
 print(summary_statistics)
 print(len(summary_statistics))
-
+"""
 
 r2_norm = get_rsq_norm_per_chromosome(mask = mask, chrom = chrom, r2_norm = s_norm)
 r2_norm_ge_1 = np.mean(r2_norm >= 1)
@@ -797,7 +890,7 @@ summary_statistics.append(np.nanstd(ild_norm_all))
 summary_statistics.append(ild_norm_ge_1)
 print(len(summary_statistics)) 
 
-
+"""
 scaled_r2_norm = calculate_Anderson_rsq_norm(mask, chrom = chrom, pos = pos, r2_norm = s_norm) 
 scaled_r2_norm_quant = np.nanquantile(scaled_r2_norm, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
@@ -814,7 +907,7 @@ summary_statistics.append(np.nanvar(scaled_r2_norm))
 summary_statistics.append(np.nanstd(scaled_r2_norm))
 print(summary_statistics)
 print(len(summary_statistics))
-
+"""
 
 n = 43
 a1 = np.sum(1 / np.arange(1, n))
@@ -923,6 +1016,49 @@ print(proportions)
 summary_statistics.extend(proportions) #137-146 ILD Frequency spectrum
 
 summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
+print(summary_statistics)
+
+adjacent_r2_stats = get_weighted_rsq_stats_per_chromosome(mask = mask, pos=pos, chrom=chrom, s = s)
+
+summary_statistics.extend([
+    adjacent_r2_stats['weighted_quantiles'][0.1],
+    adjacent_r2_stats['weighted_quantiles'][0.3],
+    adjacent_r2_stats['weighted_quantiles'][0.5],
+    adjacent_r2_stats['weighted_quantiles'][0.7],
+    adjacent_r2_stats['weighted_quantiles'][0.9],
+    adjacent_r2_stats['weighted_mean'],
+    adjacent_r2_stats['weighted_std'],
+
+    adjacent_r2_stats['unweighted_quantiles'][0.1],
+    adjacent_r2_stats['unweighted_quantiles'][0.3],
+    adjacent_r2_stats['unweighted_quantiles'][0.5],
+    adjacent_r2_stats['unweighted_quantiles'][0.7],
+    adjacent_r2_stats['unweighted_quantiles'][0.9],
+    adjacent_r2_stats['unweighted_mean'],
+    adjacent_r2_stats['unweighted_std']
+
+])
+
+
+adjacent_norm_r2_stats = get_weighted_rsq_stats_per_chromosome(mask = mask, pos=pos, chrom=chrom, s = s_norm)
+
+summary_statistics.extend([
+    adjacent_norm_r2_stats['weighted_quantiles'][0.1],
+    adjacent_norm_r2_stats['weighted_quantiles'][0.3],
+    adjacent_norm_r2_stats['weighted_quantiles'][0.5],
+    adjacent_norm_r2_stats['weighted_quantiles'][0.7],
+    adjacent_norm_r2_stats['weighted_quantiles'][0.9],
+    adjacent_norm_r2_stats['weighted_mean'],
+    adjacent_norm_r2_stats['weighted_std'],
+
+    adjacent_norm_r2_stats['unweighted_quantiles'][0.1],
+    adjacent_norm_r2_stats['unweighted_quantiles'][0.3],
+    adjacent_norm_r2_stats['unweighted_quantiles'][0.5],
+    adjacent_norm_r2_stats['unweighted_quantiles'][0.7],
+    adjacent_norm_r2_stats['unweighted_quantiles'][0.9],
+    adjacent_norm_r2_stats['unweighted_mean'],
+    adjacent_norm_r2_stats['unweighted_std']
+])
 print(summary_statistics)
 
 import pandas as pd
