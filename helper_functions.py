@@ -81,7 +81,7 @@ def add_sfs_summary(afs, sample_size, summary_statistics):
 ######Calculate pairwise r-squared for entire genome with allele count pruning
 
 def calculate_r2(mts, exclude_ac_below, sample_size):
-    print("Converted to genotype matrix...")
+    
     g = mts.genotype_matrix()
     g = allel.HaplotypeArray(g)
 
@@ -97,8 +97,7 @@ def calculate_r2(mts, exclude_ac_below, sample_size):
     gn_filt = g[mask].astype(np.float64)
 
 
-    print("Shape of unfiltered genotype matrix =", g.shape)
-    print("Shape of filtered matrix =", gn_filt.shape)
+    
 
     # ---- Vectorized r^2 ----
     X = gn_filt  # shape (n_snps, n_haplotypes)
@@ -159,16 +158,6 @@ def calculate_r2(mts, exclude_ac_below, sample_size):
     # convert flat index to matrix indices
     i, j = np.unravel_index(idx, r2_norm.shape)
 
-    print("Max r2_norm at indices:", i, j)
-    print("r2_norm =", r2_norm[i, j])
-
-    print("r2 =", s[i, j])
-    print("r2_max =", r2_max[i, j])
-
-    print("p_i =", p[i])
-    print("p_j =", p[j])
-
-
     return s, r2_norm, mask
 
 
@@ -189,8 +178,7 @@ def calculate_hamming(h, ploidy, summary_statistics):
     summary_statistics.append(np.nanmean(hamming_array)) #43 mean hamming
     summary_statistics.append(np.nanstd(hamming_array)) #44 std hamming
     summary_statistics.append(np.nanvar(hamming_array)) #45 var hamming
-    print("Sum_stats with hamming")
-    print(summary_statistics)
+
 
 ######Calculate length of homozygous regions
 
@@ -228,16 +216,13 @@ def get_rsq_per_chromosome(mask, ts_chroms, s):
     
     mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
     
-    print(len(mask_chrom1))
-    print(len(mask_chrom2))
-    print(len(mask_chrom3))
+
     
 
     chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
     chrom2_mut_num = ts_chroms[1].num_sites - np.sum(mask_chrom2 != True)
     chrom3_mut_num = ts_chroms[2].num_sites - np.sum(mask_chrom3 != True)
-    print("Mutation numbers:")
-    print(chrom1_mut_num, chrom2_mut_num, chrom3_mut_num, len(s))
+
     chrom1and2_mut_num = chrom1_mut_num + chrom2_mut_num
     total_mut_num = chrom1_mut_num + chrom2_mut_num + chrom3_mut_num
 
@@ -269,16 +254,13 @@ def get_rsq_norm_per_chromosome(mask, ts_chroms, r2_norm):
     
     mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
     
-    print(len(mask_chrom1))
-    print(len(mask_chrom2))
-    print(len(mask_chrom3))
+
     
 
     chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
     chrom2_mut_num = ts_chroms[1].num_sites - np.sum(mask_chrom2 != True)
     chrom3_mut_num = ts_chroms[2].num_sites - np.sum(mask_chrom3 != True)
-    print("Mutation numbers:")
-    print(chrom1_mut_num, chrom2_mut_num, chrom3_mut_num, len(r2_norm))
+
     chrom1and2_mut_num = chrom1_mut_num + chrom2_mut_num
     total_mut_num = chrom1_mut_num + chrom2_mut_num + chrom3_mut_num
 
@@ -297,8 +279,7 @@ def get_rsq_norm_per_chromosome(mask, ts_chroms, r2_norm):
 
 
     r2_norm = np.concatenate((chrom1_ld, chrom2_ld, chrom3_ld))
-    print("max R2 norm:")
-    print(max(r2_norm))
+
     return r2_norm
 
 ######Get ILD
@@ -310,10 +291,7 @@ def get_ILD(mask, ts_chroms, s):
     mask_chrom2 = mask[ts_chroms[0].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites]
     
     mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
-    print("ILD masks lens:")
-    print(len(mask_chrom1))
-    print(len(mask_chrom2))
-    print(len(mask_chrom3))
+
     
 
     chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
@@ -327,20 +305,14 @@ def get_ILD(mask, ts_chroms, s):
     c1 = chrom1_mut_num
     c2 = chrom1and2_mut_num
     c3 = total_mut_num   # total mutation count
-    print("index boundaries:")
-    print(c1,c2,c3)
-    # Block slices:
-    # Chrom1 = [0:c1]
-    # Chrom2 = [c1:c2]
-    # Chrom3 = [c2:c3]
+
+
 
     # ---- Only take each inter-chromosome comparison once ---- #
-    print("s")
-    print(s)
-    print("shape of s:", np.array(s).shape)
+
     # Chrom1 vs Chrom2  (upper-right block)
     chrom1_2 = s[0:c1, c1:c2].ravel()
-    print(chrom1_2)
+
     # Chrom1 vs Chrom3
     chrom1_3 = s[0:c1, c2:c3].ravel()
 
@@ -360,10 +332,7 @@ def get_ILD_norm(mask, ts_chroms, r2_norm):
     mask_chrom2 = mask[ts_chroms[0].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites]
     
     mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
-    print("ILD masks lens:")
-    print(len(mask_chrom1))
-    print(len(mask_chrom2))
-    print(len(mask_chrom3))
+ 
     
 
     chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
@@ -377,20 +346,13 @@ def get_ILD_norm(mask, ts_chroms, r2_norm):
     c1 = chrom1_mut_num
     c2 = chrom1and2_mut_num
     c3 = total_mut_num   # total mutation count
-    print("index boundaries:")
-    print(c1,c2,c3)
-    # Block slices:
-    # Chrom1 = [0:c1]
-    # Chrom2 = [c1:c2]
-    # Chrom3 = [c2:c3]
+
 
     # ---- Only take each inter-chromosome comparison once ---- #
-    print("r2_norm")
-    print(r2_norm)
-    print("shape of r2_norm:", np.array(r2_norm).shape)
+ 
     # Chrom1 vs Chrom2  (upper-right block)
     chrom1_2 = r2_norm[0:c1, c1:c2].ravel()
-    print(chrom1_2)
+
     # Chrom1 vs Chrom3
     chrom1_3 = r2_norm[0:c1, c2:c3].ravel()
 
@@ -411,16 +373,14 @@ def calculate_Anderson_rsq(mask, ts_chroms, s):
     
     mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
     
-    print(len(mask_chrom1))
-    print(len(mask_chrom2))
-    print(len(mask_chrom3))
+
     
 
     chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
     chrom2_mut_num = ts_chroms[1].num_sites - np.sum(mask_chrom2 != True)
     chrom3_mut_num = ts_chroms[2].num_sites - np.sum(mask_chrom3 != True)
 
-    print(chrom1_mut_num, chrom2_mut_num, chrom3_mut_num, len(s))
+
     chrom1and2_mut_num = chrom1_mut_num + chrom2_mut_num
     total_mut_num = chrom1_mut_num + chrom2_mut_num + chrom3_mut_num
 
@@ -481,16 +441,14 @@ def calculate_Anderson_rsq_norm(mask, ts_chroms, r2_norm):
     
     mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
     
-    print(len(mask_chrom1))
-    print(len(mask_chrom2))
-    print(len(mask_chrom3))
+ 
     
 
     chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
     chrom2_mut_num = ts_chroms[1].num_sites - np.sum(mask_chrom2 != True)
     chrom3_mut_num = ts_chroms[2].num_sites - np.sum(mask_chrom3 != True)
 
-    print(chrom1_mut_num, chrom2_mut_num, chrom3_mut_num, len(r2_norm))
+
     chrom1and2_mut_num = chrom1_mut_num + chrom2_mut_num
     total_mut_num = chrom1_mut_num + chrom2_mut_num + chrom3_mut_num
 
@@ -634,3 +592,71 @@ def compute_window_hiloPMI(mts, n, window_start, window_end, ic=2):
     hilo_PMI = np.log(eta_hilo/(eta_lo * eta_hi))
     return hilo_PMI, eta_hilo, eta_lo, eta_hi
 
+
+
+def get_weighted_rsq_stats_per_chromosome(mask, ts_chroms, s, quantiles=[0.1, 0.3, 0.5, 0.7, 0.9]):
+
+    def weighted_quantiles(values, weights, quantiles):
+        sorter = np.argsort(values)
+        sorted_vals = values[sorter]
+        sorted_weights = weights[sorter]
+        cumulative_weights = np.cumsum(sorted_weights)
+        cumulative_weights /= cumulative_weights[-1]
+        return np.interp(quantiles, cumulative_weights, sorted_vals)
+
+    def weighted_stats(r2_adj, dist_adj, quantiles):
+        weights = 1 / dist_adj
+        weighted_mean = np.sum(weights * r2_adj) / np.sum(weights)
+        V1 = np.sum(weights)
+        V2 = np.sum(weights**2)
+        weighted_var = (V1 / (V1**2 - V2)) * np.sum(weights * (r2_adj - weighted_mean)**2)
+        weighted_std = np.sqrt(weighted_var)
+        wq = weighted_quantiles(r2_adj, weights, quantiles)
+        return weighted_mean, weighted_std, wq
+
+    # Split mask per chromosome
+    mask_chrom1 = mask[:ts_chroms[0].num_sites]
+    mask_chrom2 = mask[ts_chroms[0].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites]
+    mask_chrom3 = mask[ts_chroms[0].num_sites+ts_chroms[1].num_sites:ts_chroms[0].num_sites+ts_chroms[1].num_sites+ts_chroms[2].num_sites]
+
+    # Mutation counts per chromosome
+    chrom1_mut_num = ts_chroms[0].num_sites - np.sum(mask_chrom1 != True)
+    chrom2_mut_num = ts_chroms[1].num_sites - np.sum(mask_chrom2 != True)
+    chrom3_mut_num = ts_chroms[2].num_sites - np.sum(mask_chrom3 != True)
+    chrom1and2_mut_num = chrom1_mut_num + chrom2_mut_num
+    total_mut_num = chrom1_mut_num + chrom2_mut_num + chrom3_mut_num
+
+    # Slice r2 matrix and compute adjacent distances per chromosome
+    all_r2 = []
+    all_dist = []
+    for ts_chrom, mask_chrom, start, end in zip(
+        ts_chroms,
+        [mask_chrom1, mask_chrom2, mask_chrom3],
+        [0, chrom1_mut_num, chrom1and2_mut_num],
+        [chrom1_mut_num, chrom1and2_mut_num, total_mut_num]
+    ):
+        ld_mat = s[start:end, start:end]
+        n = ld_mat.shape[0]
+        adj_idx = (np.arange(n-1), np.arange(1, n))
+        all_r2.append(ld_mat[adj_idx])
+
+        # Compute adjacent distances directly from site positions
+        positions = ts_chrom.sites_position[mask_chrom]
+        all_dist.append(np.diff(positions))
+
+    # Combine across chromosomes and filter zero distances
+    all_r2 = np.concatenate(all_r2)
+    all_dist = np.concatenate(all_dist)
+    valid = all_dist > 0
+    all_r2, all_dist = all_r2[valid], all_dist[valid]
+
+    mean, std, wq = weighted_stats(all_r2, all_dist, quantiles)
+    print("weighted average r2:", mean)
+    print("weighted std r2:", std)
+    print("weighted quantiles r2:", wq)
+
+    return {
+        'weighted_mean': mean,
+        'weighted_std': std,
+        'weighted_quantiles': dict(zip(quantiles, wq))
+    }
