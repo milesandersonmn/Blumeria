@@ -593,7 +593,6 @@ def compute_window_hiloPMI(mts, n, window_start, window_end, ic=2):
     return hilo_PMI, eta_hilo, eta_lo, eta_hi
 
 
-
 def get_weighted_rsq_stats_per_chromosome(mask, ts_chroms, s, quantiles=[0.1, 0.3, 0.5, 0.7, 0.9]):
 
     def weighted_quantiles(values, weights, quantiles):
@@ -613,6 +612,12 @@ def get_weighted_rsq_stats_per_chromosome(mask, ts_chroms, s, quantiles=[0.1, 0.
         weighted_std = np.sqrt(weighted_var)
         wq = weighted_quantiles(r2_adj, weights, quantiles)
         return weighted_mean, weighted_std, wq
+
+    def unweighted_stats(r2_adj, quantiles):
+        mean = np.mean(r2_adj)
+        std = np.std(r2_adj, ddof=1)
+        uq = np.quantile(r2_adj, quantiles)
+        return mean, std, uq
 
     # Split mask per chromosome
     mask_chrom1 = mask[:ts_chroms[0].num_sites]
@@ -651,12 +656,20 @@ def get_weighted_rsq_stats_per_chromosome(mask, ts_chroms, s, quantiles=[0.1, 0.
     all_r2, all_dist = all_r2[valid], all_dist[valid]
 
     mean, std, wq = weighted_stats(all_r2, all_dist, quantiles)
+    umean, ustd, uq = unweighted_stats(all_r2, quantiles)
+
     print("weighted average r2:", mean)
     print("weighted std r2:", std)
     print("weighted quantiles r2:", wq)
+    print("unweighted average r2:", umean)
+    print("unweighted std r2:", ustd)
+    print("unweighted quantiles r2:", uq)
 
     return {
         'weighted_mean': mean,
         'weighted_std': std,
-        'weighted_quantiles': dict(zip(quantiles, wq))
+        'weighted_quantiles': dict(zip(quantiles, wq)),
+        'unweighted_mean': umean,
+        'unweighted_std': ustd,
+        'unweighted_quantiles': dict(zip(quantiles, uq))
     }

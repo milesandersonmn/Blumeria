@@ -33,13 +33,13 @@ file = (
     f"{target_min}_{target_max}_unfoldedSFS.csv"
 )
 """
-file = "test_weighted_r2.csv"
+file = "test_adj_r2.csv"
 
 exclude_ac_below = 2
 ploidy = 1
 
 growth_rate_high = -0.000001
-growth_rate_low = -0.00001
+growth_rate_low = -0.000007
 
 
 
@@ -379,29 +379,46 @@ def sim_summary_stats(alpha):
             summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
          
 
-            weighted_r2_stats = helper_functions.get_weighted_rsq_stats_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
+            adjacent_r2_stats = helper_functions.get_weighted_rsq_stats_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s)
  
             summary_statistics.extend([
-                weighted_r2_stats['weighted_quantiles'][0.1],
-                weighted_r2_stats['weighted_quantiles'][0.3],
-                weighted_r2_stats['weighted_quantiles'][0.5],
-                weighted_r2_stats['weighted_quantiles'][0.7],
-                weighted_r2_stats['weighted_quantiles'][0.9],
-                weighted_r2_stats['weighted_mean'],
-                weighted_r2_stats['weighted_std']
+                adjacent_r2_stats['weighted_quantiles'][0.1],
+                adjacent_r2_stats['weighted_quantiles'][0.3],
+                adjacent_r2_stats['weighted_quantiles'][0.5],
+                adjacent_r2_stats['weighted_quantiles'][0.7],
+                adjacent_r2_stats['weighted_quantiles'][0.9],
+                adjacent_r2_stats['weighted_mean'],
+                adjacent_r2_stats['weighted_std'],
+
+                adjacent_r2_stats['unweighted_quantiles'][0.1],
+                adjacent_r2_stats['unweighted_quantiles'][0.3],
+                adjacent_r2_stats['unweighted_quantiles'][0.5],
+                adjacent_r2_stats['unweighted_quantiles'][0.7],
+                adjacent_r2_stats['unweighted_quantiles'][0.9],
+                adjacent_r2_stats['unweighted_mean'],
+                adjacent_r2_stats['unweighted_std']
+
             ])
 
 
-            weighted_norm_r2_stats = helper_functions.get_weighted_rsq_stats_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s_norm)
+            adjacent_norm_r2_stats = helper_functions.get_weighted_rsq_stats_per_chromosome(mask = mask, ts_chroms = ts_chroms, s = s_norm)
  
             summary_statistics.extend([
-                weighted_norm_r2_stats['weighted_quantiles'][0.1],
-                weighted_norm_r2_stats['weighted_quantiles'][0.3],
-                weighted_norm_r2_stats['weighted_quantiles'][0.5],
-                weighted_norm_r2_stats['weighted_quantiles'][0.7],
-                weighted_norm_r2_stats['weighted_quantiles'][0.9],
-                weighted_norm_r2_stats['weighted_mean'],
-                weighted_norm_r2_stats['weighted_std']
+                adjacent_norm_r2_stats['weighted_quantiles'][0.1],
+                adjacent_norm_r2_stats['weighted_quantiles'][0.3],
+                adjacent_norm_r2_stats['weighted_quantiles'][0.5],
+                adjacent_norm_r2_stats['weighted_quantiles'][0.7],
+                adjacent_norm_r2_stats['weighted_quantiles'][0.9],
+                adjacent_norm_r2_stats['weighted_mean'],
+                adjacent_norm_r2_stats['weighted_std'],
+
+                adjacent_norm_r2_stats['unweighted_quantiles'][0.1],
+                adjacent_norm_r2_stats['unweighted_quantiles'][0.3],
+                adjacent_norm_r2_stats['unweighted_quantiles'][0.5],
+                adjacent_norm_r2_stats['unweighted_quantiles'][0.7],
+                adjacent_norm_r2_stats['unweighted_quantiles'][0.9],
+                adjacent_norm_r2_stats['unweighted_mean'],
+                adjacent_norm_r2_stats['unweighted_std']
             ])
             print(summary_statistics)
 
@@ -463,7 +480,7 @@ import concurrent.futures
 worker_num = 8
 reps = 100
 alpha_values = [1.9, 1.7, 1.5, 1.3, 1.1]
-alpha_values = [1.3, 1.1]
+#alpha_values = [1.3, 1.1]
 
 functions = [sim_summary_stats]
 results_buffer = []
