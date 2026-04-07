@@ -75,7 +75,7 @@ def sim_summary_stats(alpha):
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
     # -------------------
-    rng = np.random.default_rng(12345)
+    
     attempt = 0
     while True:
         attempt += 1
