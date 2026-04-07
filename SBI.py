@@ -99,7 +99,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             np.set_printoptions(legacy="1.21") #exclude dbtype from np arrays
             summary_statistics = [] #Initialize list of summary statistics
 
-
+            """
             afs = mts.allele_frequency_spectrum(span_normalise=False, polarised=True)
 
             afs_entries = helper_functions.add_sfs_summary(afs = afs, sample_size = sample_size, summary_statistics = summary_statistics) #12:26 SFS
@@ -118,7 +118,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             summary_statistics.append(np.nanmean(D_array)) #32 mean Tajima's D
             summary_statistics.append(np.nanvar(D_array)) #33 variance of Tajima's D
             summary_statistics.append(np.nanstd(D_array)) #34 std D
-
+            """
             #split genome into chromosomes
             ts_chroms = []
             for j in range(len(chrom_positions) - 1): 
@@ -257,7 +257,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             summary_statistics.append(np.nanvar(scaled_r2_norm))
             summary_statistics.append(np.nanstd(scaled_r2_norm))               
             """
-            
+            """
             samples = mts.samples()
             n = len(samples)
 
@@ -300,7 +300,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
           
             summary_statistics.append(np.nanmean(result)) #102-103 normalized Tajima's D
             summary_statistics.append(np.nanstd(result))
-
+            """
             #Clip r^2 values greater than 1
             r2 = np.clip(r2, 0, 1)
             proportions = np.histogram(r2, bins=np.arange(0, 1.1, 0.1))[0] / len(r2)
@@ -430,135 +430,114 @@ def sim_summary_stats(alpha, t_b, severity, duration):
 from sbi import inference as sbi_inference
 from sbi.utils import BoxUniform
 import torch
+import numpy as np
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+from concurrent.futures import ProcessPoolExecutor
 
 # Define priors
 prior = BoxUniform(
-    low=torch.tensor([1.3, 10.0,  0.001, 10.0]),   # alpha, t_b, severity, duration
+    low=torch.tensor([1.3, 10.0, 0.001, 10.0]),   # alpha, t_b, severity, duration
     high=torch.tensor([1.9, 100000.0, 1.0, 5000.0])
 )
 
-# Simulator wrapper: returns summary stats as tensor
-
-
 def simulator(params):
     params = params.numpy()
-    
-    # If batched (2D), take the first row — simulate_for_sbi sometimes passes batches
     if params.ndim == 2:
         params = params[0]
-    
     params = params.flatten()
     alpha, t_b, severity, duration = params
     stats = sim_summary_stats(alpha, t_b, severity, duration)
     return torch.tensor(np.array(stats), dtype=torch.float32).flatten()
 
-test_params = prior.sample((1,)).squeeze()
-test_out = simulator(test_params)
-print(f"shape: {test_out.shape}")   # should be (149,) or however many stats you have
-print(f"ndim: {test_out.ndim}")     # must be 1
-
-
-num_simulations = 1000
-thetas = []
-xs = []
-
-for i in range(num_simulations):
+def run_single_sim(_):
     params = prior.sample((1,)).squeeze()
     stats = simulator(params)
-    thetas.append(params)
-    xs.append(stats)
-    print(f"Simulation {i+1}/{num_simulations} — stats shape: {stats.shape}")
+    return params, stats
 
-theta = torch.stack(thetas)
-x = torch.stack(xs)
+if __name__ == "__main__":
 
-print(f"Final theta shape: {theta.shape}")  # expect (10, 4)
-print(f"Final x shape: {x.shape}")          # expect (10, 149)
+    # Test simulator output
+    test_params = prior.sample((1,)).squeeze()
+    test_out = simulator(test_params)
+    print(f"shape: {test_out.shape}")
+    print(f"ndim: {test_out.ndim}")
 
-inferrer = sbi_inference.SNPE(prior=prior)
-inferrer.append_simulations(theta, x)
-density_estimator = inferrer.train(max_num_epochs=20)
-posterior = inferrer.build_posterior(density_estimator)
-"""
-# Train NPE
-inferrer = sbi_inference.SNPE(prior=prior)
-#theta, x = sbi_inference.simulate_for_sbi(simulator, prior, num_simulations=100)
-theta, x = sbi_inference.simulate_for_sbi(
-    simulator, 
-    prior, 
-    num_simulations=10,
-    simulation_batch_size=1  # forces one simulation at a time
-)
-inferrer.append_simulations(theta, x)
-density_estimator = inferrer.train()
-posterior = inferrer.build_posterior(density_estimator)
-"""
+    # Run simulations in parallel
+    num_simulations = 10000
+    num_workers = os.cpu_count() - 1
+    print(f"Running {num_simulations} simulations across {num_workers} cores...")
 
-# Sample posterior given observed stats
-#x_obs = torch.tensor(compute_summary_stats(observed_ts), dtype=torch.float32)
-#samples = posterior.sample((10_000,), x=x_obs)
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        results = list(executor.map(run_single_sim, range(num_simulations)))
 
-x_obs = torch.tensor(pd.read_csv("observed_sum_stats.csv").values, dtype=torch.float32).squeeze()
-samples = posterior.sample((10_000,), x=x_obs)
+    thetas, xs = zip(*results)
+    theta = torch.stack(thetas)
+    x = torch.stack(xs)
 
+    print(f"Final theta shape: {theta.shape}")
+    print(f"Final x shape: {x.shape}")
 
-samples = posterior.sample((10_000,), x=x_obs)
+    # Save simulations to disk
+    np.save("theta.npy", theta.numpy())
+    np.save("x.npy", x.numpy())
 
-# Convert to numpy for plotting
-samples_np = samples.numpy()
-param_names = ["alpha", "t_bottleneck", "severity", "duration"]
+    # Train NPE
+    inferrer = sbi_inference.SNPE(prior=prior)
+    inferrer.append_simulations(theta, x)
+    density_estimator = inferrer.train()
+    posterior = inferrer.build_posterior(density_estimator)
 
-# Print summary statistics
-for i, name in enumerate(param_names):
-    print(f"{name}: mean={samples_np[:, i].mean():.4f}, "
-          f"std={samples_np[:, i].std():.4f}, "
-          f"95% CI=[{np.percentile(samples_np[:, i], 2.5):.4f}, "
-          f"{np.percentile(samples_np[:, i], 97.5):.4f}]")
+    # Sample posterior given observed stats
+    x_obs = torch.tensor(pd.read_csv("observed_sum_stats.csv").values, dtype=torch.float32).squeeze()
+    samples = posterior.sample((10_000,), x=x_obs)
+    samples_np = samples.numpy()
+    param_names = ["alpha", "t_bottleneck", "severity", "duration"]
 
-# Plot marginal posteriors
-import matplotlib.pyplot as plt
+    # Print posterior summaries
+    for i, name in enumerate(param_names):
+        print(f"{name}: mean={samples_np[:, i].mean():.4f}, "
+              f"std={samples_np[:, i].std():.4f}, "
+              f"95% CI=[{np.percentile(samples_np[:, i], 2.5):.4f}, "
+              f"{np.percentile(samples_np[:, i], 97.5):.4f}]")
 
-fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-for i, (name, ax) in enumerate(zip(param_names, axes)):
-    ax.hist(samples_np[:, i], bins=50, density=True, color="steelblue", alpha=0.7)
-    ax.set_title(name)
-    ax.set_xlabel("Value")
-    ax.set_ylabel("Density")
-plt.tight_layout()
-plt.savefig("posterior_marginals.png", dpi=150)
-plt.show()
+    # Save posterior samples
+    pd.DataFrame(samples_np, columns=param_names).to_csv("posterior_samples.csv", index=False)
+    print("Saved posterior_samples.csv")
 
-# Save samples to CSV
-pd.DataFrame(samples_np, columns=param_names).to_csv("posterior_samples.csv", index=False)
-print("Saved posterior_samples.csv and posterior_marginals.png")
+    # Plot marginal posteriors
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    for i, (name, ax) in enumerate(zip(param_names, axes)):
+        ax.hist(samples_np[:, i], bins=50, density=True, color="steelblue", alpha=0.7)
+        ax.set_title(name)
+        ax.set_xlabel("Value")
+        ax.set_ylabel("Density")
+    plt.tight_layout()
+    plt.savefig("posterior_marginals.png", dpi=150)
+    plt.show()
+    print("Saved posterior_marginals.png")
 
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
-
-param_names = ["alpha", "t_bottleneck", "severity", "duration"]
-n_params = len(param_names)
-
-fig, axes = plt.subplots(n_params, n_params, figsize=(12, 12))
-
-for i in range(n_params):
-    for j in range(n_params):
-        ax = axes[i, j]
-        if i == j:
-            # Marginal on diagonal
-            ax.hist(samples_np[:, i], bins=50, density=True, 
-                    color="steelblue", alpha=0.7)
-        elif i > j:
-            # Joint 2D histogram on lower triangle
-            ax.hist2d(samples_np[:, j], samples_np[:, i], 
-                      bins=50, norm=LogNorm(), cmap="Blues")
-        else:
-            ax.axis("off")  # upper triangle empty
-        
-        if j == 0:
-            ax.set_ylabel(param_names[i])
-        if i == n_params - 1:
-            ax.set_xlabel(param_names[j])
-
-plt.tight_layout()
-plt.savefig("joint_posterior.png", dpi=150)
-plt.show()
+    # Plot joint pairwise posteriors
+    n_params = len(param_names)
+    fig, axes = plt.subplots(n_params, n_params, figsize=(12, 12))
+    for i in range(n_params):
+        for j in range(n_params):
+            ax = axes[i, j]
+            if i == j:
+                ax.hist(samples_np[:, i], bins=50, density=True,
+                        color="steelblue", alpha=0.7)
+            elif i > j:
+                ax.hist2d(samples_np[:, j], samples_np[:, i],
+                          bins=50, norm=LogNorm(), cmap="Blues")
+            else:
+                ax.axis("off")
+            if j == 0:
+                ax.set_ylabel(param_names[i])
+            if i == n_params - 1:
+                ax.set_xlabel(param_names[j])
+    plt.tight_layout()
+    plt.savefig("joint_posterior.png", dpi=150)
+    plt.show()
+    print("Saved joint_posterior.png")

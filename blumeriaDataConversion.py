@@ -755,6 +755,7 @@ summary_statistics.append(np.nanvar(D_array)) #33 variance of Tajima's D
 summary_statistics.append(np.nanstd(D_array)) #34 std D
 print(summary_statistics)
 
+
 calculate_hamming(h = hap, ploidy = 1, summary_statistics = summary_statistics)
 print(summary_statistics)
 
@@ -830,7 +831,7 @@ arr_chrom1 = pos[chrom == unique_chrom[0]]
 print("Arr_chrom:",arr_chrom1)
 print(len(arr_chrom1))
 
-"""
+
 scaled_r2 = calculate_Anderson_rsq(mask = mask, chrom = chrom, pos = pos, s = s)
 scaled_r2_quant = np.nanquantile(scaled_r2, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
@@ -848,7 +849,7 @@ summary_statistics.append(np.nanvar(scaled_r2))
 summary_statistics.append(np.nanstd(scaled_r2))
 print(summary_statistics)
 print(len(summary_statistics))
-"""
+
 
 r2_norm = get_rsq_norm_per_chromosome(mask = mask, chrom = chrom, r2_norm = s_norm)
 r2_norm_ge_1 = np.mean(r2_norm >= 1)
@@ -890,7 +891,7 @@ summary_statistics.append(np.nanstd(ild_norm_all))
 summary_statistics.append(ild_norm_ge_1)
 print(len(summary_statistics)) 
 
-"""
+
 scaled_r2_norm = calculate_Anderson_rsq_norm(mask, chrom = chrom, pos = pos, r2_norm = s_norm) 
 scaled_r2_norm_quant = np.nanquantile(scaled_r2_norm, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
@@ -907,7 +908,6 @@ summary_statistics.append(np.nanvar(scaled_r2_norm))
 summary_statistics.append(np.nanstd(scaled_r2_norm))
 print(summary_statistics)
 print(len(summary_statistics))
-"""
 
 n = 43
 a1 = np.sum(1 / np.arange(1, n))
