@@ -8,24 +8,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import helper_functions
 
-def simulate_beta_bottleneck(alpha, t_bottleneck, severity, duration,
-                              N0,
+def simulate_beta_demogrpahy(alpha,
+                              N0, Ne_windows, breakpoints,
                               n_samples, rate_map, mu, ploidy = 1):
     
     demography = msprime.Demography()
     demography.add_population(name="A", initial_size=N0)
-    
-    # Add bottleneck as instantaneous size change
-    demography.add_population_parameters_change(
-        time=t_bottleneck, 
-        population="A", 
-        initial_size=N0 * severity  # severity << 1 for strong bottleneck
-    )
-    demography.add_population_parameters_change(
-        time=t_bottleneck + duration,
-        population="A",
-        initial_size=N0  # recover
-    )
+
+    # Add Ne change at each time window breakpoint
+    for t, Ne in zip(breakpoints, Ne_windows):
+        demography.add_population_parameters_change(
+            time=t, population="A", initial_size=N0*Ne
+        )
     
     ts = msprime.sim_ancestry(
         samples=n_samples,
@@ -42,16 +36,21 @@ def simulate_beta_bottleneck(alpha, t_bottleneck, severity, duration,
 #--------------------
 #Simulation function
 #--------------------
-def sim_summary_stats(alpha, t_b, severity, duration):
+def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
     
     Ne = 40000
 
     sample_size = 43
     target_min = 2860
     target_max = 2900
-    mu = 5e-7
-    r_chrom = 3.37e-7
+   
+    mu_per_mitotic_gen  = 5e-7   # mutation rate per mitotic generation
+    r_per_meiosis       = 3.37e-7   # recombination rate per sexual generation
+    k                   = k     # asexual gens per sexual gen: FREE parameter
 
+    # --- Rescale ---
+    f_s = 1 / (k + 1)
+    r_eff = r_per_meiosis * f_s  # effective recombination rate per generation
 
     exclude_ac_below = 2
     ploidy = 1
@@ -68,25 +67,35 @@ def sim_summary_stats(alpha, t_b, severity, duration):
         chrom_positions[2] + 1,
         chrom_positions[3]
     ]
-    rates = [r_chrom, r_break, r_chrom, r_break, r_chrom] 
+    rates = [r_eff, r_break, r_eff, r_break, r_eff] 
     rate_map = msprime.RateMap(position=map_positions, rate=rates) #Rate map for separate chromosomes
 
 
     alpha = alpha
     Ne = Ne
+    Ne_windows = [Ne1, Ne2, Ne3, Ne4, Ne5, Ne6]
+    
+
+    import numpy as np
+
+    # Log-spaced time windows — more resolution in recent past
+    t_max = 10000000  # generations
+    n_windows = 7
+    breakpoints = np.logspace(1, np.log10(t_max), n_windows)
+    print(breakpoints) 
 
 
     # -------------------
     # REJECTION SAMPLING OVER MUTATIONS
     # -------------------
-    rng = np.random.default_rng(12345)
+
     attempt = 0
     while True:
         attempt += 1
-        ts = simulate_beta_bottleneck(alpha = alpha, t_bottleneck=t_b, severity=severity, duration=duration, N0=Ne,
-                                      n_samples=sample_size, rate_map=rate_map, ploidy=ploidy, mu=mu)
+        ts = simulate_beta_demogrpahy(alpha = alpha, N0=Ne, Ne_windows=Ne_windows, breakpoints=breakpoints,
+                                      n_samples=sample_size, rate_map=rate_map, ploidy=ploidy, mu=mu_per_mitotic_gen)
 
-        mts = helper_functions.mutation_model(ts = ts, mu = mu)
+        mts = helper_functions.mutation_model(ts = ts, mu = mu_per_mitotic_gen)
         S = mts.num_sites
         
         if target_min > S:
@@ -99,7 +108,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             np.set_printoptions(legacy="1.21") #exclude dbtype from np arrays
             summary_statistics = [] #Initialize list of summary statistics
 
-            """
+            
             afs = mts.allele_frequency_spectrum(span_normalise=False, polarised=True)
 
             afs_entries = helper_functions.add_sfs_summary(afs = afs, sample_size = sample_size, summary_statistics = summary_statistics) #12:26 SFS
@@ -118,7 +127,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             summary_statistics.append(np.nanmean(D_array)) #32 mean Tajima's D
             summary_statistics.append(np.nanvar(D_array)) #33 variance of Tajima's D
             summary_statistics.append(np.nanstd(D_array)) #34 std D
-            """
+            
             #split genome into chromosomes
             ts_chroms = []
             for j in range(len(chrom_positions) - 1): 
@@ -246,7 +255,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             scaled_r2_norm_quant = np.nanquantile(scaled_r2_norm, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
 
 
-            summary_statistics.append(scaled_r2_norm_quant[0]) #94-101 Normalized ILD r^2 quantiles, mean, variance, std
+            summary_statistics.append(scaled_r2_norm_quant[0]) #94-101 Norm And R-squared r^2 quantiles, mean, variance, std
             summary_statistics.append(scaled_r2_norm_quant[1])
             summary_statistics.append(scaled_r2_norm_quant[2])
             summary_statistics.append(scaled_r2_norm_quant[3])
@@ -257,7 +266,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
             summary_statistics.append(np.nanvar(scaled_r2_norm))
             summary_statistics.append(np.nanstd(scaled_r2_norm))               
             """
-            """
+            
             samples = mts.samples()
             n = len(samples)
 
@@ -300,7 +309,7 @@ def sim_summary_stats(alpha, t_b, severity, duration):
           
             summary_statistics.append(np.nanmean(result)) #102-103 normalized Tajima's D
             summary_statistics.append(np.nanstd(result))
-            """
+            
             #Clip r^2 values greater than 1
             r2 = np.clip(r2, 0, 1)
             proportions = np.histogram(r2, bins=np.arange(0, 1.1, 0.1))[0] / len(r2)
@@ -439,8 +448,10 @@ from concurrent.futures import ProcessPoolExecutor
 
 # Define priors
 prior = BoxUniform(
-    low=torch.tensor([1.3, 10.0, 0.001, 10.0]),   # alpha, t_b, severity, duration
-    high=torch.tensor([1.9, 100000.0, 1.0, 5000.0])
+    #low=torch.tensor([1.3, 10.0, 0.001, 10.0]),   # alpha, t_b, severity, duration
+    #high=torch.tensor([1.9, 100000.0, 1.0, 5000.0])
+    low=torch.tensor([1.3, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]),   # alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6
+    high=torch.tensor([1.9, 100, 2, 2, 2, 2, 2, 2])
 )
 
 def simulator(params):
@@ -448,8 +459,8 @@ def simulator(params):
     if params.ndim == 2:
         params = params[0]
     params = params.flatten()
-    alpha, t_b, severity, duration = params
-    stats = sim_summary_stats(alpha, t_b, severity, duration)
+    alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6 = params
+    stats = sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6)
     return torch.tensor(np.array(stats), dtype=torch.float32).flatten()
 
 def run_single_sim(_):
@@ -466,7 +477,7 @@ if __name__ == "__main__":
     print(f"ndim: {test_out.ndim}")
 
     # Run simulations in parallel
-    num_simulations = 10000
+    num_simulations = 100000
     num_workers = os.cpu_count() - 1
     print(f"Running {num_simulations} simulations across {num_workers} cores...")
 
@@ -491,10 +502,10 @@ if __name__ == "__main__":
     posterior = inferrer.build_posterior(density_estimator)
 
     # Sample posterior given observed stats
-    x_obs = torch.tensor(pd.read_csv("observed_sum_stats.csv").values, dtype=torch.float32).squeeze()
+    x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
     samples = posterior.sample((10_000,), x=x_obs)
     samples_np = samples.numpy()
-    param_names = ["alpha", "t_bottleneck", "severity", "duration"]
+    param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6"]
 
     # Print posterior summaries
     for i, name in enumerate(param_names):
