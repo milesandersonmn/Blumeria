@@ -470,6 +470,43 @@ def run_single_sim(_):
 
 if __name__ == "__main__":
 
+    # Run new simulations in parallel
+    num_new_simulations = 100000
+    num_workers = os.cpu_count() - 1
+    print(f"Running {num_new_simulations} simulations across {num_workers} cores...")
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        results = list(executor.map(run_single_sim, range(num_new_simulations)))
+
+    thetas_new, xs_new = zip(*results)
+    theta_new = torch.stack(thetas_new)
+    x_new = torch.stack(xs_new)
+
+    # Load and concatenate with previous simulations if they exist
+    if os.path.exists("theta.npy") and os.path.exists("x.npy"):
+        theta_old = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
+        x_old     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+        theta = torch.cat([theta_old, theta_new], dim=0)
+        x     = torch.cat([x_old,     x_new],     dim=0)
+        print(f"Loaded {theta_old.shape[0]} previous simulations, "
+              f"total now: {theta.shape[0]}")
+    else:
+        theta, x = theta_new, x_new
+        print("No previous simulations found, starting fresh.")
+
+    print(f"Final theta shape: {theta.shape}")
+    print(f"Final x shape: {x.shape}")
+
+    # Overwrite saved simulations with the full combined set
+    np.save("theta.npy", theta.numpy())
+    np.save("x.npy",     x.numpy())
+
+    # Train NPE on the full combined set
+    inferrer = sbi_inference.SNPE(prior=prior)
+    inferrer.append_simulations(theta, x)
+    density_estimator = inferrer.train()
+    
+    """
     # Test simulator output
     test_params = prior.sample((1,)).squeeze()
     test_out = simulator(test_params)
@@ -499,7 +536,9 @@ if __name__ == "__main__":
     inferrer = sbi_inference.SNPE(prior=prior)
     inferrer.append_simulations(theta, x)
     density_estimator = inferrer.train()
+    """
     posterior = inferrer.build_posterior(density_estimator)
+    
 
     # Sample posterior given observed stats
     x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
