@@ -753,6 +753,7 @@ D_array = results
 summary_statistics.append(np.nanmean(D_array)) #32 mean Tajima's D
 summary_statistics.append(np.nanvar(D_array)) #33 variance of Tajima's D
 summary_statistics.append(np.nanstd(D_array)) #34 std D
+summary_statistics.append(np.nanstd(D_array) / np.nanmean(D_array)) #35 CV Tajima's D
 print(summary_statistics)
 
 
@@ -787,10 +788,12 @@ summary_statistics.append(r2_quant[3])
 summary_statistics.append(r2_quant[4])
 summary_statistics.append(r2_quant[5])
 summary_statistics.append(r2_quant[6])
-summary_statistics.append(np.nanmean(r2)) #59 mean r^2 
+summary_statistics.append(np.nanmean(r2)) #59 mean r^2
 summary_statistics.append(np.nanvar(r2)) #60 var r^2
 summary_statistics.append(np.nanstd(r2)) #61 std r^2
-summary_statistics.append(np.nanstd(r2_ge_1))
+summary_statistics.append(np.nanstd(r2) / np.nanmean(r2)) #62 CV r^2
+summary_statistics.append(np.nanmean(r2) - r2_quant[2]) #mean - median r^2
+summary_statistics.append(r2_ge_1)
 print(r2)
 print(len(r2))
 print(len(r2[r2 != 0]))
@@ -815,7 +818,9 @@ summary_statistics.append(ild_quant[6])
 summary_statistics.append(np.nanmean(ild_all)) #67 mean ILD
 summary_statistics.append(np.nanvar(ild_all)) #68 var ILD
 summary_statistics.append(np.nanstd(ild_all)) #69 std ILD
-summary_statistics.append(np.nanstd(ild_ge_1))
+summary_statistics.append(np.nanstd(ild_all) / np.nanmean(ild_all)) #70 CV ILD
+summary_statistics.append(np.nanmean(ild_all) - ild_quant[2]) #mean - median ILD
+summary_statistics.append(ild_ge_1)
 print(len(summary_statistics))
 
 print(ild_all)
@@ -868,6 +873,8 @@ summary_statistics.append(r2_norm_quant[6])
 summary_statistics.append(np.nanmean(r2_norm))
 summary_statistics.append(np.nanvar(r2_norm))
 summary_statistics.append(np.nanstd(r2_norm))
+summary_statistics.append(np.nanstd(r2_norm) / np.nanmean(r2_norm)) #CV r2_norm
+summary_statistics.append(np.nanmean(r2_norm) - r2_norm_quant[2]) #mean - median r2_norm
 summary_statistics.append(r2_norm_ge_1)
 print(len(summary_statistics))     
 
@@ -889,6 +896,8 @@ summary_statistics.append(ild_norm_all_quant[6])
 summary_statistics.append(np.nanmean(ild_norm_all))
 summary_statistics.append(np.nanvar(ild_norm_all))
 summary_statistics.append(np.nanstd(ild_norm_all))
+summary_statistics.append(np.nanstd(ild_norm_all) / np.nanmean(ild_norm_all)) #CV ild_norm
+summary_statistics.append(np.nanmean(ild_norm_all) - ild_norm_all_quant[2]) #mean - median ild_norm
 summary_statistics.append(ild_norm_ge_1)
 print(len(summary_statistics)) 
 
@@ -985,6 +994,7 @@ print(np.mean(results))
 
 summary_statistics.append(np.nanmean(results)) #102-103 normalized Tajima's D
 summary_statistics.append(np.nanstd(results))
+summary_statistics.append(np.nanstd(results) / np.nanmean(results)) #CV normalized Tajima's D
 
 r2 = np.clip(r2, 0, 1)
 proportions = np.histogram(r2, bins=np.arange(0, 1.1, 0.1))[0] / len(r2)
@@ -1030,6 +1040,8 @@ summary_statistics.extend([
     adjacent_r2_stats['weighted_quantiles'][0.9],
     adjacent_r2_stats['weighted_mean'],
     adjacent_r2_stats['weighted_std'],
+    adjacent_r2_stats['weighted_std'] / adjacent_r2_stats['weighted_mean'],
+    adjacent_r2_stats['weighted_mean'] - adjacent_r2_stats['weighted_quantiles'][0.5],
 
     adjacent_r2_stats['unweighted_quantiles'][0.1],
     adjacent_r2_stats['unweighted_quantiles'][0.3],
@@ -1037,7 +1049,9 @@ summary_statistics.extend([
     adjacent_r2_stats['unweighted_quantiles'][0.7],
     adjacent_r2_stats['unweighted_quantiles'][0.9],
     adjacent_r2_stats['unweighted_mean'],
-    adjacent_r2_stats['unweighted_std']
+    adjacent_r2_stats['unweighted_std'],
+    adjacent_r2_stats['unweighted_std'] / adjacent_r2_stats['unweighted_mean'],
+    adjacent_r2_stats['unweighted_mean'] - adjacent_r2_stats['unweighted_quantiles'][0.5],
 
 ])
 
@@ -1052,6 +1066,8 @@ summary_statistics.extend([
     adjacent_norm_r2_stats['weighted_quantiles'][0.9],
     adjacent_norm_r2_stats['weighted_mean'],
     adjacent_norm_r2_stats['weighted_std'],
+    adjacent_norm_r2_stats['weighted_std'] / adjacent_norm_r2_stats['weighted_mean'],
+    adjacent_norm_r2_stats['weighted_mean'] - adjacent_norm_r2_stats['weighted_quantiles'][0.5],
 
     adjacent_norm_r2_stats['unweighted_quantiles'][0.1],
     adjacent_norm_r2_stats['unweighted_quantiles'][0.3],
@@ -1059,7 +1075,9 @@ summary_statistics.extend([
     adjacent_norm_r2_stats['unweighted_quantiles'][0.7],
     adjacent_norm_r2_stats['unweighted_quantiles'][0.9],
     adjacent_norm_r2_stats['unweighted_mean'],
-    adjacent_norm_r2_stats['unweighted_std']
+    adjacent_norm_r2_stats['unweighted_std'],
+    adjacent_norm_r2_stats['unweighted_std'] / adjacent_norm_r2_stats['unweighted_mean'],
+    adjacent_norm_r2_stats['unweighted_mean'] - adjacent_norm_r2_stats['unweighted_quantiles'][0.5],
 ])
 print(summary_statistics)
 
