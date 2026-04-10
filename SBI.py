@@ -26,7 +26,6 @@ def simulate_beta_demogrpahy(alpha,
         model=msprime.BetaCoalescent(alpha=alpha),
         ploidy=ploidy  # alpha in (1, 2)
     )
-    ts = msprime.sim_mutations(ts, rate=mu)
     return ts
 
 
@@ -34,7 +33,7 @@ def simulate_beta_demogrpahy(alpha,
 #--------------------
 #Simulation function
 #--------------------
-def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
+def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6, Ne7, Ne8, Ne9, Ne10, Ne11):
     
     Ne = 40000
 
@@ -71,16 +70,16 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
 
     alpha = alpha
     Ne = Ne
-    Ne_windows = [Ne1, Ne2, Ne3, Ne4, Ne5, Ne6]
-    
+    Ne_windows = [Ne1, Ne2, Ne3, Ne4, Ne5, Ne6, Ne7, Ne8, Ne9, Ne10, Ne11]
 
     import numpy as np
 
-    # Log-spaced time windows — more resolution in recent past
-    t_max = 10000000  # generations
-    n_windows = 7
-    breakpoints = np.logspace(1, np.log10(t_max), n_windows)
-    print(breakpoints) 
+    # Fixed time window boundaries (older boundary of each window, recent to ancient)
+    # Windows: 50-10, 100-50, 200-100, 300-200, 400-300, 500-400, 1000-500,
+    #          10000-1000, 100000-10000, 1000000-100000, 10000000-1000000
+    # N0 covers 0-10 generations
+    breakpoints = [10, 50, 100, 200, 300, 400, 500, 1000, 10000, 100000, 1000000]
+    print(breakpoints)
 
 
     # -------------------
@@ -120,7 +119,6 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             summary_statistics.append(afs_quant[4]) #0.9
 
             summary_statistics.append(helper_functions.sfs_symmetry_ratio(afs, sample_size)) #SFS symmetry ratio
-            summary_statistics.append(helper_functions.sfs_singleton_highfreq_ratio(afs, sample_size)) #singleton / high-freq ratio
 
             num_windows = 30
 
@@ -469,8 +467,8 @@ from concurrent.futures import ProcessPoolExecutor
 prior = BoxUniform(
     #low=torch.tensor([1.3, 10.0, 0.001, 10.0]),   # alpha, t_b, severity, duration
     #high=torch.tensor([1.9, 100000.0, 1.0, 5000.0])
-    low=torch.tensor([1.3, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]),   # alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6
-    high=torch.tensor([1.9, 100, 2, 2, 2, 2, 2, 2])
+    low=torch.tensor([1.3, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]),   # alpha, k, Ne1-Ne11
+    high=torch.tensor([1.9, 150, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5])
 )
 
 def simulator(params):
@@ -478,8 +476,8 @@ def simulator(params):
     if params.ndim == 2:
         params = params[0]
     params = params.flatten()
-    alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6 = params
-    stats = sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6)
+    alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6, Ne7, Ne8, Ne9, Ne10, Ne11 = params
+    stats = sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6, Ne7, Ne8, Ne9, Ne10, Ne11)
     return torch.tensor(np.array(stats), dtype=torch.float32).flatten()
 
 def run_single_sim(_):
@@ -490,7 +488,7 @@ def run_single_sim(_):
 if __name__ == "__main__":
 
     # Run new simulations in parallel
-    num_new_simulations = 100000
+    num_new_simulations = 1000
     num_workers = os.cpu_count() - 1
     print(f"Running {num_new_simulations} simulations across {num_workers} cores...")
 
@@ -501,14 +499,19 @@ if __name__ == "__main__":
     theta_new = torch.stack(thetas_new)
     x_new = torch.stack(xs_new)
 
-    # Load and concatenate with previous simulations if they exist
+    # Load and concatenate with previous simulations if they exist and dimensions match
     if os.path.exists("theta.npy") and os.path.exists("x.npy"):
         theta_old = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
         x_old     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
-        theta = torch.cat([theta_old, theta_new], dim=0)
-        x     = torch.cat([x_old,     x_new],     dim=0)
-        print(f"Loaded {theta_old.shape[0]} previous simulations, "
-              f"total now: {theta.shape[0]}")
+        if x_old.shape[1] == x_new.shape[1] and theta_old.shape[1] == theta_new.shape[1]:
+            theta = torch.cat([theta_old, theta_new], dim=0)
+            x     = torch.cat([x_old,     x_new],     dim=0)
+            print(f"Loaded {theta_old.shape[0]} previous simulations, "
+                  f"total now: {theta.shape[0]}")
+        else:
+            theta, x = theta_new, x_new
+            print(f"Dimension mismatch: old x has {x_old.shape[1]} stats, "
+                  f"new x has {x_new.shape[1]}. Discarding old simulations.")
     else:
         theta, x = theta_new, x_new
         print("No previous simulations found, starting fresh.")
@@ -563,7 +566,7 @@ if __name__ == "__main__":
     x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
     samples = posterior.sample((10_000,), x=x_obs)
     samples_np = samples.numpy()
-    param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6"]
+    param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
 
     # Print posterior summaries
     for i, name in enumerate(param_names):
@@ -577,7 +580,7 @@ if __name__ == "__main__":
     print("Saved posterior_samples.csv")
 
     # Plot marginal posteriors
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    fig, axes = plt.subplots(1, len(param_names), figsize=(4 * len(param_names), 4))
     for i, (name, ax) in enumerate(zip(param_names, axes)):
         ax.hist(samples_np[:, i], bins=50, density=True, color="steelblue", alpha=0.7)
         ax.set_title(name)
@@ -610,3 +613,101 @@ if __name__ == "__main__":
     plt.savefig("joint_posterior.png", dpi=150)
     plt.show()
     print("Saved joint_posterior.png")
+
+    # ----------------------------------------
+    # RANDOM FOREST SUMMARY STATISTIC IMPORTANCE
+    # ----------------------------------------
+    from sklearn.ensemble import RandomForestRegressor
+
+    x_np = x.numpy()
+    theta_np = theta.numpy()
+    n_stats = x_np.shape[1]
+
+    importance_matrix = np.zeros((len(param_names), n_stats))
+    for i, name in enumerate(param_names):
+        rf = RandomForestRegressor(n_estimators=200, n_jobs=-1, random_state=42)
+        rf.fit(x_np, theta_np[:, i])
+        importance_matrix[i] = rf.feature_importances_
+        top_idx = np.argsort(rf.feature_importances_)[::-1][:10]
+        print(f"{name} top 10 stats: indices={top_idx}, importances={rf.feature_importances_[top_idx].round(4)}")
+
+    # Plot heatmap of importances
+    fig, ax = plt.subplots(figsize=(max(12, n_stats // 4), len(param_names)))
+    im = ax.imshow(importance_matrix, aspect="auto", cmap="viridis")
+    ax.set_yticks(range(len(param_names)))
+    ax.set_yticklabels(param_names)
+    ax.set_xlabel("Summary statistic index")
+    ax.set_ylabel("Parameter")
+    ax.set_title("Random forest feature importance")
+    plt.colorbar(im, ax=ax, label="Importance")
+    plt.tight_layout()
+    plt.savefig("rf_importance.png", dpi=150)
+    plt.show()
+    print("Saved rf_importance.png")
+
+    # ----------------------------------------
+    # POSTERIOR PREDICTIVE CHECK
+    # ----------------------------------------
+    n_ppc = 500
+    ppc_params = posterior.sample((n_ppc,), x=x_obs)
+    ppc_stats = []
+    for j in range(n_ppc):
+        p = ppc_params[j]
+        try:
+            s = simulator(p)
+            ppc_stats.append(s.numpy())
+        except Exception:
+            continue
+    ppc_stats = np.array(ppc_stats)  # shape (n_ppc, n_stats)
+    x_obs_np = x_obs.numpy()
+
+    # Plot first 20 summary statistics
+    n_plot = min(20, n_stats)
+    fig, axes = plt.subplots(4, 5, figsize=(20, 16))
+    for k, ax in enumerate(axes.flat):
+        if k >= n_plot:
+            ax.axis("off")
+            continue
+        ax.hist(ppc_stats[:, k], bins=30, density=True, color="steelblue", alpha=0.7, label="PPC")
+        ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
+        ax.set_title(f"Stat {k}")
+        if k == 0:
+            ax.legend(fontsize=8)
+    plt.suptitle("Posterior predictive check (first 20 summary statistics)", y=1.01)
+    plt.tight_layout()
+    plt.savefig("posterior_predictive_check.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved posterior_predictive_check.png")
+
+    # ----------------------------------------
+    # PAIRPLOT (posterior vs prior)
+    # ----------------------------------------
+    prior_samples_np = prior.sample((10_000,)).numpy()
+
+    n_params = len(param_names)
+    fig, axes = plt.subplots(n_params, n_params, figsize=(3 * n_params, 3 * n_params))
+    for i in range(n_params):
+        for j in range(n_params):
+            ax = axes[i, j]
+            if i == j:
+                ax.hist(prior_samples_np[:, i], bins=50, density=True,
+                        color="grey", alpha=0.4, label="Prior")
+                ax.hist(samples_np[:, i], bins=50, density=True,
+                        color="steelblue", alpha=0.7, label="Posterior")
+                if i == 0:
+                    ax.legend(fontsize=7)
+            elif i > j:
+                ax.hist2d(samples_np[:, j], samples_np[:, i],
+                          bins=40, norm=LogNorm(), cmap="Blues")
+            else:
+                ax.axis("off")
+            if j == 0:
+                ax.set_ylabel(param_names[i], fontsize=8)
+            if i == n_params - 1:
+                ax.set_xlabel(param_names[j], fontsize=8)
+            ax.tick_params(labelsize=6)
+    plt.suptitle("Posterior pairplot (with prior overlay on diagonal)", y=1.002)
+    plt.tight_layout()
+    plt.savefig("pairplot.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved pairplot.png")
