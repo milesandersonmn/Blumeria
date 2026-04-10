@@ -1,8 +1,6 @@
 import msprime
-import msprime
 import numpy as np
 import math
-import scipy
 import allel
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -127,6 +125,7 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             summary_statistics.append(np.nanmean(D_array)) #32 mean Tajima's D
             summary_statistics.append(np.nanvar(D_array)) #33 variance of Tajima's D
             summary_statistics.append(np.nanstd(D_array)) #34 std D
+            summary_statistics.append(np.nanstd(D_array) / np.nanmean(D_array)) #35 CV Tajima's D
             
             #split genome into chromosomes
             ts_chroms = []
@@ -165,9 +164,11 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             summary_statistics.append(r2_quant[4])
             summary_statistics.append(r2_quant[5])
             summary_statistics.append(r2_quant[6])
-            summary_statistics.append(np.nanmean(r2)) #59 mean r^2 
+            summary_statistics.append(np.nanmean(r2)) #59 mean r^2
             summary_statistics.append(np.nanvar(r2)) #60 var r^2
             summary_statistics.append(np.nanstd(r2)) #61 std r^2
+            summary_statistics.append(np.nanstd(r2) / np.nanmean(r2)) #62 CV r^2
+            summary_statistics.append(np.nanmean(r2) - r2_quant[2]) #mean - median r^2
             summary_statistics.append(r2_ge_1)
            
 
@@ -189,6 +190,8 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             summary_statistics.append(np.nanmean(ild_all)) #67 mean ILD
             summary_statistics.append(np.nanvar(ild_all)) #68 var ILD
             summary_statistics.append(np.nanstd(ild_all)) #69 std ILD
+            summary_statistics.append(np.nanstd(ild_all) / np.nanmean(ild_all)) #70 CV ILD
+            summary_statistics.append(np.nanmean(ild_all) - ild_quant[2]) #mean - median ILD
             summary_statistics.append(ild_ge_1)
             
 
@@ -229,6 +232,8 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             summary_statistics.append(np.nanmean(r2_norm))
             summary_statistics.append(np.nanvar(r2_norm))
             summary_statistics.append(np.nanstd(r2_norm))
+            summary_statistics.append(np.nanstd(r2_norm) / np.nanmean(r2_norm)) #CV r2_norm
+            summary_statistics.append(np.nanmean(r2_norm) - r2_norm_quant[2]) #mean - median r2_norm
             summary_statistics.append(r2_norm_ge_1)
                 
 
@@ -248,6 +253,8 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             summary_statistics.append(np.nanmean(ild_norm_all))
             summary_statistics.append(np.nanvar(ild_norm_all))
             summary_statistics.append(np.nanstd(ild_norm_all))
+            summary_statistics.append(np.nanstd(ild_norm_all) / np.nanmean(ild_norm_all)) #CV ild_norm
+            summary_statistics.append(np.nanmean(ild_norm_all) - ild_norm_all_quant[2]) #mean - median ild_norm
             summary_statistics.append(ild_norm_ge_1)
            
             """
@@ -309,6 +316,7 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
           
             summary_statistics.append(np.nanmean(result)) #102-103 normalized Tajima's D
             summary_statistics.append(np.nanstd(result))
+            summary_statistics.append(np.nanstd(result) / np.nanmean(result)) #CV normalized Tajima's D
             
             #Clip r^2 values greater than 1
             r2 = np.clip(r2, 0, 1)
@@ -355,6 +363,8 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
                 adjacent_r2_stats['weighted_quantiles'][0.9],
                 adjacent_r2_stats['weighted_mean'],
                 adjacent_r2_stats['weighted_std'],
+                adjacent_r2_stats['weighted_std'] / adjacent_r2_stats['weighted_mean'],
+                adjacent_r2_stats['weighted_mean'] - adjacent_r2_stats['weighted_quantiles'][0.5],
 
                 adjacent_r2_stats['unweighted_quantiles'][0.1],
                 adjacent_r2_stats['unweighted_quantiles'][0.3],
@@ -362,7 +372,9 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
                 adjacent_r2_stats['unweighted_quantiles'][0.7],
                 adjacent_r2_stats['unweighted_quantiles'][0.9],
                 adjacent_r2_stats['unweighted_mean'],
-                adjacent_r2_stats['unweighted_std']
+                adjacent_r2_stats['unweighted_std'],
+                adjacent_r2_stats['unweighted_std'] / adjacent_r2_stats['unweighted_mean'],
+                adjacent_r2_stats['unweighted_mean'] - adjacent_r2_stats['unweighted_quantiles'][0.5],
 
             ])
 
@@ -377,6 +389,8 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
                 adjacent_norm_r2_stats['weighted_quantiles'][0.9],
                 adjacent_norm_r2_stats['weighted_mean'],
                 adjacent_norm_r2_stats['weighted_std'],
+                adjacent_norm_r2_stats['weighted_std'] / adjacent_norm_r2_stats['weighted_mean'],
+                adjacent_norm_r2_stats['weighted_mean'] - adjacent_norm_r2_stats['weighted_quantiles'][0.5],
 
                 adjacent_norm_r2_stats['unweighted_quantiles'][0.1],
                 adjacent_norm_r2_stats['unweighted_quantiles'][0.3],
@@ -384,7 +398,9 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
                 adjacent_norm_r2_stats['unweighted_quantiles'][0.7],
                 adjacent_norm_r2_stats['unweighted_quantiles'][0.9],
                 adjacent_norm_r2_stats['unweighted_mean'],
-                adjacent_norm_r2_stats['unweighted_std']
+                adjacent_norm_r2_stats['unweighted_std'],
+                adjacent_norm_r2_stats['unweighted_std'] / adjacent_norm_r2_stats['unweighted_mean'],
+                adjacent_norm_r2_stats['unweighted_mean'] - adjacent_norm_r2_stats['unweighted_quantiles'][0.5],
             ])
             print(summary_statistics)
 
