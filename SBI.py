@@ -113,11 +113,14 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6):
             
 
             afs_quant = np.quantile(afs_entries, [0.1, 0.3, 0.5, 0.7, 0.9])
-            summary_statistics.append(afs_quant[0]) #27 AFS quantile 0.1
-            summary_statistics.append(afs_quant[1]) #28 0.3
-            summary_statistics.append(afs_quant[2]) #29 0.5
-            summary_statistics.append(afs_quant[3]) #30 0.7
-            summary_statistics.append(afs_quant[4]) #31 0.9
+            summary_statistics.append(afs_quant[0]) #AFS quantile 0.1
+            summary_statistics.append(afs_quant[1]) #0.3
+            summary_statistics.append(afs_quant[2]) #0.5
+            summary_statistics.append(afs_quant[3]) #0.7
+            summary_statistics.append(afs_quant[4]) #0.9
+
+            summary_statistics.append(helper_functions.sfs_symmetry_ratio(afs, sample_size)) #SFS symmetry ratio
+            summary_statistics.append(helper_functions.sfs_singleton_highfreq_ratio(afs, sample_size)) #singleton / high-freq ratio
 
             num_windows = 30
 

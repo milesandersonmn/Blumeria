@@ -66,16 +66,63 @@ def add_sfs_summary(afs, sample_size, summary_statistics):
     afs_entries = np.array(afs_entries)
 
     # Append SFS summary stats directly to the existing list
-    total = afs.sum()
+    total = afs[1:sample_size].sum()  # exclude monomorphic (0) and fixed (sample_size) classes
 
-    # bins 1–14
-    for i in range(1, 15):
+    # all bins 1 through sample_size-1
+    for i in range(1, sample_size):
         summary_statistics.append(afs[i] / total)
 
-    # bin 15+
-    summary_statistics.append(afs[15:].sum() / total)
-
     return afs_entries
+
+
+def sfs_symmetry_ratio(afs, sample_size):
+    """
+    Ratio of high-frequency to low-frequency derived allele counts.
+    Values > 1 indicate U-shaped SFS (excess high-frequency variants),
+    as expected under Beta coalescent with low alpha.
+
+    Parameters
+    ----------
+    afs : array-like
+        AFS array where afs[x] = number of mutations with count x.
+    sample_size : int
+        Number of haploid individuals.
+
+    Returns
+    -------
+    float : sum(afs[midpoint:]) / sum(afs[1:midpoint])
+    """
+    midpoint = sample_size // 2
+    low = afs[1:midpoint].sum()
+    high = afs[midpoint:sample_size].sum()
+    if low == 0:
+        return np.nan
+    return high / low
+
+
+def sfs_singleton_highfreq_ratio(afs, sample_size, highfreq_cutoff=2):
+    """
+    Ratio of singleton count to high-frequency derived allele counts.
+    High-frequency is defined as the top `highfreq_cutoff` bins.
+
+    Parameters
+    ----------
+    afs : array-like
+        AFS array where afs[x] = number of mutations with count x.
+    sample_size : int
+        Number of haploid individuals.
+    highfreq_cutoff : int
+        Number of bins from the top to sum as high-frequency (default 2).
+
+    Returns
+    -------
+    float : afs[1] / sum(afs[sample_size-highfreq_cutoff:sample_size])
+    """
+    singletons = afs[1]
+    high_freq = afs[sample_size - highfreq_cutoff:sample_size].sum()
+    if high_freq == 0:
+        return np.nan
+    return singletons / high_freq
 
 
 ######Calculate pairwise r-squared for entire genome with allele count pruning
