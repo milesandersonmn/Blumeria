@@ -459,6 +459,7 @@ import torch
 import numpy as np
 import os
 import pandas as pd
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from concurrent.futures import ProcessPoolExecutor
@@ -485,15 +486,79 @@ def run_single_sim(_):
     stats = simulator(params)
     return params, stats
 
+
+# ---- SFS confounding experiment helpers (top-level for pickling) ----
+
+def _confound_sim_worker(args):
+    """Single simulation for the SFS confounding grid."""
+    alpha, ne_recent = args
+    # ne_recent applied to Ne1-Ne7 (10-1000 gen); Ne8-Ne11 held flat at 1.0
+    stats = sim_summary_stats(alpha, 1,
+                              ne_recent, ne_recent, ne_recent, ne_recent,
+                              ne_recent, ne_recent, ne_recent,
+                              1, 1, 1, 1)
+    return np.array(stats[:42])  # SFS bins 1-42
+
+
+def run_sfs_confounding_experiment(num_workers, n_sims=20):
+    """
+    Simulate SFS under four conditions demonstrating confounding between
+    alpha (Beta coalescent) and recent demography (Ne1-Ne7, 10-1000 gen).
+
+    Conditions
+    ----------
+    1. Low alpha (1.4), flat demography     — pure low-alpha signal
+    2. High alpha (1.8), flat demography    — pure high-alpha signal
+    3. High alpha (1.8) + recent expansion  — mimics low alpha (excess singletons)
+    4. Low alpha (1.4) + recent contraction — mimics high alpha (excess intermediates)
+    """
+    conditions = [
+        ("Low alpha (1.4), flat demography",        1.4, 1.0),
+        ("High alpha (1.8), flat demography",       1.8, 1.0),
+        ("High alpha (1.8) + recent expansion",     1.8, 0.1),
+        ("Low alpha (1.4) + recent contraction",    1.4, 5.0),
+    ]
+    colors = ["steelblue", "darkorange", "forestgreen", "crimson"]
+    bin_labels = np.arange(1, 43)
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+
+    for (label, alpha, ne_recent), color in zip(conditions, colors):
+        job_args = [(alpha, ne_recent)] * n_sims
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            results = list(tqdm(executor.map(_confound_sim_worker, job_args),
+                                total=n_sims, desc=label))
+
+        mat = np.array(results)
+        mean_sfs = mat.mean(axis=0)
+        std_sfs = mat.std(axis=0)
+
+        ax.plot(bin_labels, mean_sfs, label=label, color=color, linewidth=2)
+        ax.fill_between(bin_labels,
+                        mean_sfs - std_sfs,
+                        mean_sfs + std_sfs,
+                        alpha=0.2, color=color)
+
+    ax.set_xlabel("SFS bin (derived allele count)", fontsize=12)
+    ax.set_ylabel("Proportion of segregating sites", fontsize=12)
+    ax.set_title("SFS confounding: alpha vs. recent demography (Ne1-Ne7, 10-1000 gen)", fontsize=13)
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    plt.savefig("sfs_confounding.png", dpi=150)
+    plt.show()
+    print("Saved sfs_confounding.png")
+
+
 if __name__ == "__main__":
 
     # Run new simulations in parallel
-    num_new_simulations = 1000
+    num_new_simulations = 100000
     num_workers = os.cpu_count() - 1
     print(f"Running {num_new_simulations} simulations across {num_workers} cores...")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        results = list(executor.map(run_single_sim, range(num_new_simulations)))
+        results = list(tqdm(executor.map(run_single_sim, range(num_new_simulations)),
+                            total=num_new_simulations, desc="Simulations"))
 
     thetas_new, xs_new = zip(*results)
     theta_new = torch.stack(thetas_new)
@@ -623,10 +688,12 @@ if __name__ == "__main__":
     theta_np = theta.numpy()
     n_stats = x_np.shape[1]
 
+    rf_models = {}
     importance_matrix = np.zeros((len(param_names), n_stats))
     for i, name in enumerate(param_names):
         rf = RandomForestRegressor(n_estimators=200, n_jobs=-1, random_state=42)
         rf.fit(x_np, theta_np[:, i])
+        rf_models[name] = rf
         importance_matrix[i] = rf.feature_importances_
         top_idx = np.argsort(rf.feature_importances_)[::-1][:10]
         print(f"{name} top 10 stats: indices={top_idx}, importances={rf.feature_importances_[top_idx].round(4)}")
@@ -646,19 +713,81 @@ if __name__ == "__main__":
     print("Saved rf_importance.png")
 
     # ----------------------------------------
+    # SFS CONFOUNDING EXPERIMENT
+    # ----------------------------------------
+    run_sfs_confounding_experiment(num_workers=num_workers, n_sims=20)
+
+    # ----------------------------------------
+    # SHAP: ALPHA vs RECENT DEMOGRAPHY INTERACTION
+    # ----------------------------------------
+    import shap
+
+    sfs_bin1_idx = 0   # SFS bin 1 (singletons) is x column 0
+    # Ne1-Ne7 are theta columns 2-8; summarise recent demography as their mean
+    ne_recent_vals = theta_np[:, 2:9].mean(axis=1)
+
+    background_size = min(500, x_np.shape[0])
+    rng_shap = np.random.default_rng(0)
+    bg_idx = rng_shap.choice(x_np.shape[0], size=background_size, replace=False)
+    X_bg = x_np[bg_idx]
+    ne_recent_bg = ne_recent_vals[bg_idx]
+    singleton_bg = x_np[bg_idx, sfs_bin1_idx]
+
+    ncols = 3
+    nrows = math.ceil(len(param_names) / ncols)
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(5 * ncols, 4 * nrows),
+                             squeeze=False)
+
+    for pi, name in enumerate(param_names):
+        ax = axes[pi // ncols][pi % ncols]
+        explainer = shap.TreeExplainer(rf_models[name], X_bg)
+        shap_vals = explainer.shap_values(X_bg)   # (background_size, n_stats)
+        shap_for_bin1 = shap_vals[:, sfs_bin1_idx]
+
+        sc = ax.scatter(ne_recent_bg, shap_for_bin1,
+                        c=singleton_bg, cmap="RdBu_r",
+                        s=12, alpha=0.6)
+        cbar = plt.colorbar(sc, ax=ax)
+        cbar.set_label("SFS bin 1 value", fontsize=8)
+        ax.axhline(0, color="grey", linewidth=0.8, linestyle="--")
+        ax.set_xlabel("Mean Ne1-Ne7 (recent Ne multiplier)", fontsize=9)
+        ax.set_ylabel(f"SHAP value of SFS bin 1\nfor RF({name})", fontsize=8)
+        ax.set_title(f"Parameter: {name}", fontsize=10)
+
+    for pi in range(len(param_names), nrows * ncols):
+        axes[pi // ncols][pi % ncols].axis("off")
+
+    plt.suptitle(
+        "SHAP: how SFS singleton bin 1 drives each parameter's RF prediction\n"
+        "as a function of recent Ne (mean Ne1-Ne7) — confounding diagnostic",
+        y=1.01, fontsize=11
+    )
+    plt.tight_layout()
+    plt.savefig("shap_alpha_Ne_interaction.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved shap_alpha_Ne_interaction.png")
+
+    # ----------------------------------------
     # POSTERIOR PREDICTIVE CHECK
     # ----------------------------------------
+    def run_ppc_sim(params_np):
+        try:
+            p = torch.tensor(params_np, dtype=torch.float32)
+            return simulator(p).numpy()
+        except Exception:
+            return None
+
     n_ppc = 500
     ppc_params = posterior.sample((n_ppc,), x=x_obs)
-    ppc_stats = []
-    for j in range(n_ppc):
-        p = ppc_params[j]
-        try:
-            s = simulator(p)
-            ppc_stats.append(s.numpy())
-        except Exception:
-            continue
-    ppc_stats = np.array(ppc_stats)  # shape (n_ppc, n_stats)
+    ppc_params_list = [ppc_params[j].numpy() for j in range(n_ppc)]
+
+    print(f"Running {n_ppc} PPC simulations across {num_workers} cores...")
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        ppc_results = list(tqdm(executor.map(run_ppc_sim, ppc_params_list),
+                                total=n_ppc, desc="PPC simulations"))
+
+    ppc_stats = np.array([r for r in ppc_results if r is not None])  # shape (n_valid, n_stats)
     x_obs_np = x_obs.numpy()
 
     # Plot first 20 summary statistics
