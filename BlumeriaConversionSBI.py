@@ -13,7 +13,7 @@ def sfs_symmetry_ratio(afs, sample_size):
     low = afs[1:midpoint].sum()
     high = afs[midpoint:sample_size].sum()
     if low == 0:
-        return np.nan
+        return 0.0
     return high / low
 
 
@@ -720,7 +720,6 @@ summary_statistics.append(afs_quant[3]) #0.7
 summary_statistics.append(afs_quant[4]) #0.9
 
 summary_statistics.append(sfs_symmetry_ratio(sfs, sample_size)) #SFS symmetry ratio
-summary_statistics.append(sfs_singleton_highfreq_ratio(sfs, sample_size)) #singleton / high-freq ratio
 afs_entries = []
 
 pos = callset['variants/POS']
