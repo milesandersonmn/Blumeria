@@ -8,6 +8,23 @@ exclude_ac_below = 2
 ploidy = 1
 sample_size = 43
 
+def sfs_symmetry_ratio(afs, sample_size):
+    midpoint = sample_size // 2
+    low = afs[1:midpoint].sum()
+    high = afs[midpoint:sample_size].sum()
+    if low == 0:
+        return np.nan
+    return high / low
+
+
+def sfs_singleton_highfreq_ratio(afs, sample_size, highfreq_cutoff=2):
+    singletons = afs[1]
+    high_freq = afs[sample_size - highfreq_cutoff:sample_size].sum()
+    if high_freq == 0:
+        return np.nan
+    return singletons / high_freq
+
+
 def add_sfs_summary(afs, sample_size, summary_statistics):
     """
     Builds afs_entries from an AFS vector and appends
@@ -41,14 +58,11 @@ def add_sfs_summary(afs, sample_size, summary_statistics):
     afs_entries = np.array(afs_entries)
 
     # Append SFS summary stats directly to the existing list
-    total = afs.sum()
+    total = afs[1:sample_size].sum()  # exclude monomorphic (0) and fixed (sample_size) classes
 
-    # bins 1–14
-    for i in range(1, 15):
+    # all bins 1 through sample_size-1
+    for i in range(1, sample_size):
         summary_statistics.append(afs[i] / total)
-
-    # bin 15+
-    summary_statistics.append(afs[15:].sum() / total)
 
     freqs = np.arange(1, len(afs)) / sample_size
     values = afs[1:] / afs.sum()
@@ -699,11 +713,14 @@ print("Summary stat length = ",len(summary_statistics))
 print(summary_statistics)
 
 afs_quant = np.quantile(afs_entries, [0.1, 0.3, 0.5, 0.7, 0.9])
-summary_statistics.append(afs_quant[0]) #27 AFS quantile 0.1
-summary_statistics.append(afs_quant[1]) #28 0.3
-summary_statistics.append(afs_quant[2]) #29 0.5
-summary_statistics.append(afs_quant[3]) #30 0.7
-summary_statistics.append(afs_quant[4]) #31 0.9
+summary_statistics.append(afs_quant[0]) #AFS quantile 0.1
+summary_statistics.append(afs_quant[1]) #0.3
+summary_statistics.append(afs_quant[2]) #0.5
+summary_statistics.append(afs_quant[3]) #0.7
+summary_statistics.append(afs_quant[4]) #0.9
+
+summary_statistics.append(sfs_symmetry_ratio(sfs, sample_size)) #SFS symmetry ratio
+summary_statistics.append(sfs_singleton_highfreq_ratio(sfs, sample_size)) #singleton / high-freq ratio
 afs_entries = []
 
 pos = callset['variants/POS']
