@@ -607,6 +607,42 @@ def run_sfs_confounding_experiment(num_workers, n_sims=20):
     print("Saved sfs_confounding.png")
 
 
+# ---- Summary statistic names (195 total, matches x.shape[1]) ----
+STAT_NAMES = (
+    [f"SFS bin {i}" for i in range(1, 43)]          # 0-41
+    + [f"AFS q{q}" for q in ["0.1","0.3","0.5","0.7","0.9"]]  # 42-46
+    + ["SFS symmetry ratio"]                          # 47
+    + ["Tajima's D mean", "Tajima's D var", "Tajima's D std", "Tajima's D CV"]  # 48-51
+    + [f"Hamming q{q}" for q in ["0.1","0.3","0.5","0.7","0.9"]]  # 52-56
+    + ["Hamming mean", "Hamming std", "Hamming var"]  # 57-59
+    + [f"r² q{q}" for q in ["0.1","0.3","0.5","0.7","0.9","0.95","0.99"]]  # 60-66
+    + ["r² mean", "r² var", "r² std", "r² CV", "r² mean-median", "r²≥1 prop"]  # 67-72
+    + [f"ILD q{q}" for q in ["0.1","0.3","0.5","0.7","0.9","0.95","0.99"]]  # 73-79
+    + ["ILD mean", "ILD var", "ILD std", "ILD CV", "ILD mean-median", "ILD≥1 prop"]  # 80-85
+    + [f"r²_norm q{q}" for q in ["0.1","0.3","0.5","0.7","0.9","0.95","0.99"]]  # 86-92
+    + ["r²_norm mean", "r²_norm var", "r²_norm std", "r²_norm CV", "r²_norm mean-median", "r²_norm≥1 prop"]  # 93-98
+    + [f"ILD_norm q{q}" for q in ["0.1","0.3","0.5","0.7","0.9","0.95","0.99"]]  # 99-105
+    + ["ILD_norm mean", "ILD_norm var", "ILD_norm std", "ILD_norm CV", "ILD_norm mean-median", "ILD_norm≥1 prop"]  # 106-111
+    + ["norm Taj.D mean", "norm Taj.D std", "norm Taj.D CV"]  # 112-114
+    + [f"r² LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f}]" for i in range(10)]  # 115-124
+    + ["r² LD-spec diff"]  # 125
+    + [f"ILD LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f}]" for i in range(10)]  # 126-135
+    + ["ILD LD-spec diff"]  # 136
+    + [f"r²_norm LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f}]" for i in range(10)]  # 137-146
+    + ["r²_norm LD-spec diff"]  # 147
+    + [f"ILD_norm LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f}]" for i in range(10)]  # 148-157
+    + ["ILD_norm LD-spec diff"]  # 158
+    + [f"adj-r² wtd q{q}" for q in ["0.1","0.3","0.5","0.7","0.9"]]  # 159-163
+    + ["adj-r² wtd mean", "adj-r² wtd std", "adj-r² wtd CV", "adj-r² wtd mean-med"]  # 164-167
+    + [f"adj-r² unwtd q{q}" for q in ["0.1","0.3","0.5","0.7","0.9"]]  # 168-172
+    + ["adj-r² unwtd mean", "adj-r² unwtd std", "adj-r² unwtd CV", "adj-r² unwtd mean-med"]  # 173-176
+    + [f"adj-r²_norm wtd q{q}" for q in ["0.1","0.3","0.5","0.7","0.9"]]  # 177-181
+    + ["adj-r²_norm wtd mean", "adj-r²_norm wtd std", "adj-r²_norm wtd CV", "adj-r²_norm wtd mean-med"]  # 182-185
+    + [f"adj-r²_norm unwtd q{q}" for q in ["0.1","0.3","0.5","0.7","0.9"]]  # 186-190
+    + ["adj-r²_norm unwtd mean", "adj-r²_norm unwtd std", "adj-r²_norm unwtd CV", "adj-r²_norm unwtd mean-med"]  # 191-194
+)
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -663,7 +699,7 @@ if __name__ == "__main__":
                 continue
             ax.hist(ppc_stats[:, k], bins=30, density=True, color="steelblue", alpha=0.7, label="PPC")
             ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
-            ax.set_title(f"Stat {k}")
+            ax.set_title(STAT_NAMES[k] if k < len(STAT_NAMES) else f"Stat {k}", fontsize=7)
             if k == 0:
                 ax.legend(fontsize=8)
         plt.suptitle("Posterior predictive check (first 20 summary statistics)", y=1.01)
@@ -916,7 +952,7 @@ if __name__ == "__main__":
             continue
         ax.hist(ppc_stats[:, k], bins=30, density=True, color="steelblue", alpha=0.7, label="PPC")
         ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
-        ax.set_title(f"Stat {k}")
+        ax.set_title(STAT_NAMES[k] if k < len(STAT_NAMES) else f"Stat {k}", fontsize=7)
         if k == 0:
             ax.legend(fontsize=8)
     plt.suptitle("Posterior predictive check (first 20 summary statistics)", y=1.01)
