@@ -95,10 +95,13 @@ def sim_summary_stats(alpha, k, Ne1, Ne2, Ne3, Ne4, Ne5, Ne6, Ne7, Ne8, Ne9, Ne1
         mts = helper_functions.mutation_model(ts = ts, mu = mu_per_mitotic_gen)
         S = mts.num_sites
         
+        if S == 0:
+            Ne = Ne * 2
+            continue
         if target_min > S:
-            Ne =(target_min/S)*Ne
+            Ne = (target_min / S) * Ne
         if target_max < S:
-            Ne = (target_max/S)*Ne
+            Ne = (target_max / S) * Ne
         if target_min <= S <= target_max:
             #print(f"Accepted on attempt {attempt}: S = {S}; Ne = {Ne}")
             Ne = Ne
@@ -458,6 +461,19 @@ from sbi.utils import BoxUniform
 import torch
 import numpy as np
 import os
+import sys
+from contextlib import contextmanager
+
+@contextmanager
+def stdout_to_log(log_path):
+    """Redirect stdout to a log file, leaving stderr (tqdm) untouched."""
+    with open(log_path, "a") as f:
+        old_stdout = sys.stdout
+        sys.stdout = f
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
 import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -482,9 +498,19 @@ def simulator(params):
     return torch.tensor(np.array(stats), dtype=torch.float32).flatten()
 
 def run_single_sim(_):
-    params = prior.sample((1,)).squeeze()
-    stats = simulator(params)
+    with stdout_to_log("sim.log"):
+        params = prior.sample((1,)).squeeze()
+        stats = simulator(params)
     return params, stats
+
+
+def run_ppc_sim(params_np):
+    try:
+        with stdout_to_log("sim.log"):
+            p = torch.tensor(params_np, dtype=torch.float32)
+            return simulator(p).numpy()
+    except Exception:
+        return None
 
 
 # ---- SFS confounding experiment helpers (top-level for pickling) ----
@@ -492,11 +518,12 @@ def run_single_sim(_):
 def _confound_sim_worker(args):
     """Single simulation for the SFS confounding grid."""
     alpha, ne_recent = args
-    # ne_recent applied to Ne1-Ne7 (10-1000 gen); Ne8-Ne11 held flat at 1.0
-    stats = sim_summary_stats(alpha, 1,
-                              ne_recent, ne_recent, ne_recent, ne_recent,
-                              ne_recent, ne_recent, ne_recent,
-                              1, 1, 1, 1)
+    with stdout_to_log("sim.log"):
+        # ne_recent applied to Ne1-Ne7 (10-1000 gen); Ne8-Ne11 held flat at 1.0
+        stats = sim_summary_stats(alpha, 1,
+                                  ne_recent, ne_recent, ne_recent, ne_recent,
+                                  ne_recent, ne_recent, ne_recent,
+                                  1, 1, 1, 1)
     return np.array(stats[:42])  # SFS bins 1-42
 
 
@@ -512,48 +539,142 @@ def run_sfs_confounding_experiment(num_workers, n_sims=20):
     3. High alpha (1.8) + recent expansion  — mimics low alpha (excess singletons)
     4. Low alpha (1.4) + recent contraction — mimics high alpha (excess intermediates)
     """
+    # Okabe-Ito colorblind-safe palette (blue, vermillion, bluish-green, orange)
     conditions = [
-        ("Low alpha (1.4), flat demography",        1.4, 1.0),
-        ("High alpha (1.8), flat demography",       1.8, 1.0),
-        ("High alpha (1.8) + recent expansion",     1.8, 0.1),
-        ("Low alpha (1.4) + recent contraction",    1.4, 5.0),
+        ("Low \u03b1 (1.4), flat",            1.4, 1.0, "#0072B2", "-",  "o"),
+        ("High \u03b1 (1.8), flat",           1.8, 1.0, "#D55E00", "--", "s"),
+        ("High \u03b1 (1.8) + expansion",     1.8, 0.1, "#009E73", "-.", "^"),
+        ("Low \u03b1 (1.4) + contraction",    1.4, 5.0, "#E69F00", ":",  "D"),
     ]
-    colors = ["steelblue", "darkorange", "forestgreen", "crimson"]
     bin_labels = np.arange(1, 43)
 
-    fig, ax = plt.subplots(figsize=(14, 6))
-
-    for (label, alpha, ne_recent), color in zip(conditions, colors):
+    # Collect results first, then plot
+    results_by_cond = []
+    for (label, alpha, ne_recent, color, ls, marker) in conditions:
         job_args = [(alpha, ne_recent)] * n_sims
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            results = list(tqdm(executor.map(_confound_sim_worker, job_args),
-                                total=n_sims, desc=label))
+            res = list(tqdm(executor.map(_confound_sim_worker, job_args),
+                            total=n_sims, desc=label))
+        mat = np.array(res)
+        results_by_cond.append((label, color, ls, marker, mat.mean(axis=0), mat.std(axis=0)))
 
-        mat = np.array(results)
-        mean_sfs = mat.mean(axis=0)
-        std_sfs = mat.std(axis=0)
+    # Two-panel plot: baselines (left) vs confounded (right)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+    panel_indices = [[0, 1], [2, 3]]   # which conditions go in each panel
+    panel_titles = [
+        "Baseline (flat demography)",
+        "Confounded (recent size change)",
+    ]
+    # Plot baselines in both panels as light reference lines
+    for ax, idx_list, title in zip(axes, panel_indices, panel_titles):
+        # faint reference: the two baselines always shown
+        for ri in [0, 1]:
+            label, color, ls, marker, mean_sfs, std_sfs = results_by_cond[ri]
+            lw = 2.5 if ri in idx_list else 1.0
+            al = 1.0 if ri in idx_list else 0.3
+            ax.plot(bin_labels, mean_sfs, label=label if ri in idx_list else None,
+                    color=color, linestyle=ls, linewidth=lw, alpha=al,
+                    marker=marker, markevery=6, markersize=5)
+            if ri in idx_list:
+                ax.fill_between(bin_labels,
+                                mean_sfs - std_sfs,
+                                mean_sfs + std_sfs,
+                                alpha=0.15, color=color)
+        # the confounded condition(s) for this panel
+        for ri in idx_list:
+            if ri in [0, 1]:
+                continue
+            label, color, ls, marker, mean_sfs, std_sfs = results_by_cond[ri]
+            ax.plot(bin_labels, mean_sfs, label=label,
+                    color=color, linestyle=ls, linewidth=2.5,
+                    marker=marker, markevery=6, markersize=5)
+            ax.fill_between(bin_labels,
+                            mean_sfs - std_sfs,
+                            mean_sfs + std_sfs,
+                            alpha=0.15, color=color)
+        ax.set_xlabel("Derived allele count", fontsize=11)
+        ax.set_title(title, fontsize=11)
+        ax.legend(fontsize=9, framealpha=0.9)
 
-        ax.plot(bin_labels, mean_sfs, label=label, color=color, linewidth=2)
-        ax.fill_between(bin_labels,
-                        mean_sfs - std_sfs,
-                        mean_sfs + std_sfs,
-                        alpha=0.2, color=color)
-
-    ax.set_xlabel("SFS bin (derived allele count)", fontsize=12)
-    ax.set_ylabel("Proportion of segregating sites", fontsize=12)
-    ax.set_title("SFS confounding: alpha vs. recent demography (Ne1-Ne7, 10-1000 gen)", fontsize=13)
-    ax.legend(fontsize=9)
+    axes[0].set_ylabel("Proportion of segregating sites", fontsize=11)
+    fig.suptitle(
+        "SFS confounding: \u03b1 (Beta coalescent) vs. recent demography (Ne1\u2013Ne7, 10\u20131000 gen)",
+        fontsize=12, y=1.02
+    )
     plt.tight_layout()
-    plt.savefig("sfs_confounding.png", dpi=150)
+    plt.savefig("sfs_confounding.png", dpi=150, bbox_inches="tight")
     plt.show()
     print("Saved sfs_confounding.png")
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--confound-only", action="store_true",
+                        help="Run only the SFS confounding experiment and exit")
+    parser.add_argument("--ppc-only", action="store_true",
+                        help="Load saved simulations, retrain NPE, run PPC only, then exit")
+    args = parser.parse_args()
+
+    num_workers = os.cpu_count() - 1
+
+    if args.confound_only:
+        run_sfs_confounding_experiment(num_workers=num_workers, n_sims=20)
+        import sys; sys.exit(0)
+
+    if args.ppc_only:
+        import sys
+        param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
+        if os.path.exists("posterior.pt"):
+            print("Loading saved posterior...")
+            posterior = torch.load("posterior.pt")
+        else:
+            print("No saved posterior found — loading simulations and retraining NPE...")
+            theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
+            x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+            print(f"Loaded theta {theta.shape}, x {x.shape}")
+            inferrer = sbi_inference.SNPE(prior=prior)
+            inferrer.append_simulations(theta, x)
+            density_estimator = inferrer.train()
+            posterior = inferrer.build_posterior(density_estimator)
+            torch.save(posterior, "posterior.pt")
+            print("Saved posterior.pt")
+
+        x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
+
+        n_ppc = 500
+        ppc_params = posterior.sample((n_ppc,), x=x_obs)
+        ppc_params_list = [ppc_params[j].numpy() for j in range(n_ppc)]
+
+        print(f"Running {n_ppc} PPC simulations across {num_workers} cores...")
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            ppc_results = list(tqdm(executor.map(run_ppc_sim, ppc_params_list),
+                                    total=n_ppc, desc="PPC simulations"))
+
+        ppc_stats = np.array([r for r in ppc_results if r is not None])
+        x_obs_np = x_obs.numpy()
+
+        n_stats = ppc_stats.shape[1]
+        n_plot = min(20, n_stats)
+        fig, axes = plt.subplots(4, 5, figsize=(20, 16))
+        for k, ax in enumerate(axes.flat):
+            if k >= n_plot:
+                ax.axis("off")
+                continue
+            ax.hist(ppc_stats[:, k], bins=30, density=True, color="steelblue", alpha=0.7, label="PPC")
+            ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
+            ax.set_title(f"Stat {k}")
+            if k == 0:
+                ax.legend(fontsize=8)
+        plt.suptitle("Posterior predictive check (first 20 summary statistics)", y=1.01)
+        plt.tight_layout()
+        plt.savefig("posterior_predictive_check.png", dpi=150, bbox_inches="tight")
+        plt.show()
+        print("Saved posterior_predictive_check.png")
+        sys.exit(0)
 
     # Run new simulations in parallel
     num_new_simulations = 100000
-    num_workers = os.cpu_count() - 1
     print(f"Running {num_new_simulations} simulations across {num_workers} cores...")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
@@ -625,6 +746,8 @@ if __name__ == "__main__":
     density_estimator = inferrer.train()
     """
     posterior = inferrer.build_posterior(density_estimator)
+    torch.save(posterior, "posterior.pt")
+    print("Saved posterior.pt")
     
 
     # Sample posterior given observed stats
@@ -678,7 +801,8 @@ if __name__ == "__main__":
     plt.savefig("joint_posterior.png", dpi=150)
     plt.show()
     print("Saved joint_posterior.png")
-
+    
+    
     # ----------------------------------------
     # RANDOM FOREST SUMMARY STATISTIC IMPORTANCE
     # ----------------------------------------
@@ -687,7 +811,7 @@ if __name__ == "__main__":
     x_np = x.numpy()
     theta_np = theta.numpy()
     n_stats = x_np.shape[1]
-
+    
     rf_models = {}
     importance_matrix = np.zeros((len(param_names), n_stats))
     for i, name in enumerate(param_names):
@@ -711,7 +835,7 @@ if __name__ == "__main__":
     plt.savefig("rf_importance.png", dpi=150)
     plt.show()
     print("Saved rf_importance.png")
-
+    
     # ----------------------------------------
     # SFS CONFOUNDING EXPERIMENT
     # ----------------------------------------
@@ -771,13 +895,6 @@ if __name__ == "__main__":
     # ----------------------------------------
     # POSTERIOR PREDICTIVE CHECK
     # ----------------------------------------
-    def run_ppc_sim(params_np):
-        try:
-            p = torch.tensor(params_np, dtype=torch.float32)
-            return simulator(p).numpy()
-        except Exception:
-            return None
-
     n_ppc = 500
     ppc_params = posterior.sample((n_ppc,), x=x_obs)
     ppc_params_list = [ppc_params[j].numpy() for j in range(n_ppc)]
