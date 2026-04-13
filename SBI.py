@@ -607,6 +607,55 @@ def run_sfs_confounding_experiment(num_workers, n_sims=20):
     print("Saved sfs_confounding.png")
 
 
+def run_shap_analysis(x_np, theta_np, rf_models, param_names):
+    import shap
+
+    sfs_bin1_idx = 0
+    ne_recent_vals = theta_np[:, 2:9].mean(axis=1)
+
+    background_size = min(500, x_np.shape[0])
+    rng_shap = np.random.default_rng(0)
+    bg_idx = rng_shap.choice(x_np.shape[0], size=background_size, replace=False)
+    X_bg = x_np[bg_idx]
+    ne_recent_bg = ne_recent_vals[bg_idx]
+    singleton_bg = x_np[bg_idx, sfs_bin1_idx]
+
+    ncols = 3
+    nrows = math.ceil(len(param_names) / ncols)
+    fig, axes = plt.subplots(nrows, ncols,
+                             figsize=(5 * ncols, 4 * nrows),
+                             squeeze=False)
+
+    for pi, name in enumerate(param_names):
+        ax = axes[pi // ncols][pi % ncols]
+        explainer = shap.TreeExplainer(rf_models[name])
+        shap_vals = explainer.shap_values(X_bg)
+        shap_for_bin1 = shap_vals[:, sfs_bin1_idx]
+
+        sc = ax.scatter(ne_recent_bg, shap_for_bin1,
+                        c=singleton_bg, cmap="RdBu_r",
+                        s=12, alpha=0.6)
+        cbar = plt.colorbar(sc, ax=ax)
+        cbar.set_label("SFS bin 1 value", fontsize=8)
+        ax.axhline(0, color="grey", linewidth=0.8, linestyle="--")
+        ax.set_xlabel("Mean Ne1–Ne7 (recent Ne multiplier)", fontsize=9)
+        ax.set_ylabel(f"SHAP value of SFS bin 1\nfor RF({name})", fontsize=8)
+        ax.set_title(f"Parameter: {name}", fontsize=10)
+
+    for pi in range(len(param_names), nrows * ncols):
+        axes[pi // ncols][pi % ncols].axis("off")
+
+    plt.suptitle(
+        "SHAP: how SFS singleton bin 1 drives each parameter's RF prediction\n"
+        "as a function of recent Ne (mean Ne1–Ne7) — confounding diagnostic",
+        y=1.01, fontsize=11
+    )
+    plt.tight_layout()
+    plt.savefig("shap_alpha_Ne_interaction.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved shap_alpha_Ne_interaction.png")
+
+
 # ---- Summary statistic names (195 total, matches x.shape[1]) ----
 STAT_NAMES = (
     [f"SFS bin {i}" for i in range(1, 43)]          # 0-41
@@ -650,6 +699,8 @@ if __name__ == "__main__":
                         help="Run only the SFS confounding experiment and exit")
     parser.add_argument("--ppc-only", action="store_true",
                         help="Load saved simulations, retrain NPE, run PPC only, then exit")
+    parser.add_argument("--shap-only", action="store_true",
+                        help="Load saved simulations, train RF, run SHAP analysis only, then exit")
     args = parser.parse_args()
 
     num_workers = os.cpu_count() - 1
@@ -707,6 +758,24 @@ if __name__ == "__main__":
         plt.savefig("posterior_predictive_check.png", dpi=150, bbox_inches="tight")
         plt.show()
         print("Saved posterior_predictive_check.png")
+        sys.exit(0)
+
+    if args.shap_only:
+        import sys
+        from sklearn.ensemble import RandomForestRegressor
+        param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
+        print("Loading saved simulations...")
+        x_np    = np.load("x.npy")
+        theta_np = np.load("theta.npy")
+        print(f"Loaded theta {theta_np.shape}, x {x_np.shape}")
+        print("Training random forests...")
+        rf_models = {}
+        for i, name in enumerate(param_names):
+            rf = RandomForestRegressor(n_estimators=200, n_jobs=1, random_state=42)
+            rf.fit(x_np, theta_np[:, i])
+            rf_models[name] = rf
+            print(f"  {name} done")
+        run_shap_analysis(x_np, theta_np, rf_models, param_names)
         sys.exit(0)
 
     # Run new simulations in parallel
@@ -880,53 +949,7 @@ if __name__ == "__main__":
     # ----------------------------------------
     # SHAP: ALPHA vs RECENT DEMOGRAPHY INTERACTION
     # ----------------------------------------
-    import shap
-
-    sfs_bin1_idx = 0   # SFS bin 1 (singletons) is x column 0
-    # Ne1-Ne7 are theta columns 2-8; summarise recent demography as their mean
-    ne_recent_vals = theta_np[:, 2:9].mean(axis=1)
-
-    background_size = min(500, x_np.shape[0])
-    rng_shap = np.random.default_rng(0)
-    bg_idx = rng_shap.choice(x_np.shape[0], size=background_size, replace=False)
-    X_bg = x_np[bg_idx]
-    ne_recent_bg = ne_recent_vals[bg_idx]
-    singleton_bg = x_np[bg_idx, sfs_bin1_idx]
-
-    ncols = 3
-    nrows = math.ceil(len(param_names) / ncols)
-    fig, axes = plt.subplots(nrows, ncols,
-                             figsize=(5 * ncols, 4 * nrows),
-                             squeeze=False)
-
-    for pi, name in enumerate(param_names):
-        ax = axes[pi // ncols][pi % ncols]
-        explainer = shap.TreeExplainer(rf_models[name], X_bg)
-        shap_vals = explainer.shap_values(X_bg)   # (background_size, n_stats)
-        shap_for_bin1 = shap_vals[:, sfs_bin1_idx]
-
-        sc = ax.scatter(ne_recent_bg, shap_for_bin1,
-                        c=singleton_bg, cmap="RdBu_r",
-                        s=12, alpha=0.6)
-        cbar = plt.colorbar(sc, ax=ax)
-        cbar.set_label("SFS bin 1 value", fontsize=8)
-        ax.axhline(0, color="grey", linewidth=0.8, linestyle="--")
-        ax.set_xlabel("Mean Ne1-Ne7 (recent Ne multiplier)", fontsize=9)
-        ax.set_ylabel(f"SHAP value of SFS bin 1\nfor RF({name})", fontsize=8)
-        ax.set_title(f"Parameter: {name}", fontsize=10)
-
-    for pi in range(len(param_names), nrows * ncols):
-        axes[pi // ncols][pi % ncols].axis("off")
-
-    plt.suptitle(
-        "SHAP: how SFS singleton bin 1 drives each parameter's RF prediction\n"
-        "as a function of recent Ne (mean Ne1-Ne7) — confounding diagnostic",
-        y=1.01, fontsize=11
-    )
-    plt.tight_layout()
-    plt.savefig("shap_alpha_Ne_interaction.png", dpi=150, bbox_inches="tight")
-    plt.show()
-    print("Saved shap_alpha_Ne_interaction.png")
+    run_shap_analysis(x_np, theta_np, rf_models, param_names)
 
     # ----------------------------------------
     # POSTERIOR PREDICTIVE CHECK
