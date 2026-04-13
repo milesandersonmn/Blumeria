@@ -607,18 +607,57 @@ def run_sfs_confounding_experiment(num_workers, n_sims=20):
     print("Saved sfs_confounding.png")
 
 
-def run_shap_analysis(x_np, theta_np, rf_models, param_names):
-    import shap
+def plot_ppc(ppc_stats, x_obs_np, out_path="posterior_predictive_check.pdf"):
+    """Save all summary statistics to a multi-page PDF, 20 panels per page."""
+    from matplotlib.backends.backend_pdf import PdfPages
+    n_stats = ppc_stats.shape[1]
+    per_page = 20
+    ncols, nrows = 5, 4
+    n_pages = math.ceil(n_stats / per_page)
 
-    sfs_bin1_idx = 0
-    ne_recent_vals = theta_np[:, 2:9].mean(axis=1)
+    with PdfPages(out_path) as pdf:
+        for page in range(n_pages):
+            fig, axes = plt.subplots(nrows, ncols, figsize=(20, 16))
+            for slot, ax in enumerate(axes.flat):
+                k = page * per_page + slot
+                if k >= n_stats:
+                    ax.axis("off")
+                    continue
+                ax.hist(ppc_stats[:, k], bins=30, density=True,
+                        color="steelblue", alpha=0.7, label="PPC")
+                ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
+                label = STAT_NAMES[k] if k < len(STAT_NAMES) else f"Stat {k}"
+                ax.set_title(label, fontsize=7)
+                if k == 0:
+                    ax.legend(fontsize=8)
+            plt.suptitle(
+                f"Posterior predictive check — stats {page*per_page+1}–{min((page+1)*per_page, n_stats)} of {n_stats}",
+                y=1.01, fontsize=10
+            )
+            plt.tight_layout()
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
+    print(f"Saved {out_path} ({n_pages} pages, {n_stats} statistics)")
+
+
+def run_shap_analysis(x_np, theta_np, rf_models, param_names, num_workers=1):
+    import shap
 
     background_size = min(500, x_np.shape[0])
     rng_shap = np.random.default_rng(0)
     bg_idx = rng_shap.choice(x_np.shape[0], size=background_size, replace=False)
     X_bg = x_np[bg_idx]
-    ne_recent_bg = ne_recent_vals[bg_idx]
-    singleton_bg = x_np[bg_idx, sfs_bin1_idx]
+
+    sfs_bin1_idx = 0
+    ne_recent_bg = theta_np[bg_idx, 2:9].mean(axis=1)
+    singleton_bg = X_bg[:, sfs_bin1_idx]
+
+    print(f"Computing SHAP values for {len(param_names)} parameters...")
+    shap_results = []
+    for name in tqdm(param_names, desc="SHAP"):
+        explainer = shap.TreeExplainer(rf_models[name])
+        shap_results.append(explainer.shap_values(X_bg))
 
     ncols = 3
     nrows = math.ceil(len(param_names) / ncols)
@@ -626,12 +665,9 @@ def run_shap_analysis(x_np, theta_np, rf_models, param_names):
                              figsize=(5 * ncols, 4 * nrows),
                              squeeze=False)
 
-    for pi, name in enumerate(param_names):
+    for pi, (name, shap_vals) in enumerate(zip(param_names, shap_results)):
         ax = axes[pi // ncols][pi % ncols]
-        explainer = shap.TreeExplainer(rf_models[name])
-        shap_vals = explainer.shap_values(X_bg)
         shap_for_bin1 = shap_vals[:, sfs_bin1_idx]
-
         sc = ax.scatter(ne_recent_bg, shap_for_bin1,
                         c=singleton_bg, cmap="RdBu_r",
                         s=12, alpha=0.6)
@@ -741,23 +777,7 @@ if __name__ == "__main__":
         ppc_stats = np.array([r for r in ppc_results if r is not None])
         x_obs_np = x_obs.numpy()
 
-        n_stats = ppc_stats.shape[1]
-        n_plot = min(20, n_stats)
-        fig, axes = plt.subplots(4, 5, figsize=(20, 16))
-        for k, ax in enumerate(axes.flat):
-            if k >= n_plot:
-                ax.axis("off")
-                continue
-            ax.hist(ppc_stats[:, k], bins=30, density=True, color="steelblue", alpha=0.7, label="PPC")
-            ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
-            ax.set_title(STAT_NAMES[k] if k < len(STAT_NAMES) else f"Stat {k}", fontsize=7)
-            if k == 0:
-                ax.legend(fontsize=8)
-        plt.suptitle("Posterior predictive check (first 20 summary statistics)", y=1.01)
-        plt.tight_layout()
-        plt.savefig("posterior_predictive_check.png", dpi=150, bbox_inches="tight")
-        plt.show()
-        print("Saved posterior_predictive_check.png")
+        plot_ppc(ppc_stats, x_obs_np)
         sys.exit(0)
 
     if args.shap_only:
@@ -768,13 +788,21 @@ if __name__ == "__main__":
         x_np    = np.load("x.npy")
         theta_np = np.load("theta.npy")
         print(f"Loaded theta {theta_np.shape}, x {x_np.shape}")
-        print("Training random forests...")
-        rf_models = {}
-        for i, name in enumerate(param_names):
-            rf = RandomForestRegressor(n_estimators=200, n_jobs=1, random_state=42)
-            rf.fit(x_np, theta_np[:, i])
-            rf_models[name] = rf
-            print(f"  {name} done")
+        import joblib
+        rf_path = "rf_models.pkl"
+        if os.path.exists(rf_path):
+            print("Loading saved random forests...")
+            rf_models = joblib.load(rf_path)
+        else:
+            print("Training random forests...")
+            rf_models = {}
+            for i, name in enumerate(param_names):
+                rf = RandomForestRegressor(n_estimators=200, n_jobs=-1, random_state=42)
+                rf.fit(x_np, theta_np[:, i])
+                rf_models[name] = rf
+                print(f"  {name} done")
+            joblib.dump(rf_models, rf_path)
+            print(f"Saved {rf_path}")
         run_shap_analysis(x_np, theta_np, rf_models, param_names)
         sys.exit(0)
 
@@ -966,23 +994,7 @@ if __name__ == "__main__":
     ppc_stats = np.array([r for r in ppc_results if r is not None])  # shape (n_valid, n_stats)
     x_obs_np = x_obs.numpy()
 
-    # Plot first 20 summary statistics
-    n_plot = min(20, n_stats)
-    fig, axes = plt.subplots(4, 5, figsize=(20, 16))
-    for k, ax in enumerate(axes.flat):
-        if k >= n_plot:
-            ax.axis("off")
-            continue
-        ax.hist(ppc_stats[:, k], bins=30, density=True, color="steelblue", alpha=0.7, label="PPC")
-        ax.axvline(x_obs_np[k], color="red", linewidth=2, label="Observed")
-        ax.set_title(STAT_NAMES[k] if k < len(STAT_NAMES) else f"Stat {k}", fontsize=7)
-        if k == 0:
-            ax.legend(fontsize=8)
-    plt.suptitle("Posterior predictive check (first 20 summary statistics)", y=1.01)
-    plt.tight_layout()
-    plt.savefig("posterior_predictive_check.png", dpi=150, bbox_inches="tight")
-    plt.show()
-    print("Saved posterior_predictive_check.png")
+    plot_ppc(ppc_stats, x_obs_np)
 
     # ----------------------------------------
     # PAIRPLOT (posterior vs prior)

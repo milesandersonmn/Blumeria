@@ -6,3 +6,4 @@ summary_stats/
 *npy
 sim.log
 posterior.pt
+rf_models.pkl
