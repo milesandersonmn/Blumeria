@@ -472,6 +472,48 @@ def sim_summary_stats(alpha):
             
 
             
+# ---- Summary statistic names (matches order appended in sim_summary_stats) ----
+STAT_NAMES = (
+    ["model_index", "growth_rate", "Ne", "alpha", "rho_theta_ratio",
+     "S", "S_norm"]                                                           # 0-6
+    + ["pi_mean", "pi_harmonic_mean", "pi_var", "pi_std", "pi"]               # 7-11
+    + [f"SFS bin {i}" for i in range(1, 43)]                                  # 12-53
+    + [f"AFS q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9"]]             # 54-58
+    + ["Tajima's D mean", "Tajima's D var", "Tajima's D std"]                  # 59-61
+    + [f"Hamming q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9"]]         # 62-66
+    + ["Hamming mean", "Hamming std", "Hamming var"]                           # 67-69
+    + [f"r² q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9", "0.95", "0.99"]]  # 70-76
+    + ["r² mean", "r² var", "r² std", "r²≥1 prop"]                            # 77-80
+    + [f"ILD q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9", "0.95", "0.99"]]  # 81-87
+    + ["ILD mean", "ILD var", "ILD std", "ILD≥1 prop"]                        # 88-91
+    + [f"Anderson r² q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9", "0.95", "0.99"]]  # 92-98
+    + ["Anderson r² mean", "Anderson r² var", "Anderson r² std"]               # 99-101
+    + [f"r²_norm q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9", "0.95", "0.99"]]  # 102-108
+    + ["r²_norm mean", "r²_norm var", "r²_norm std", "r²_norm≥1 prop"]        # 109-112
+    + [f"ILD_norm q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9", "0.95", "0.99"]]  # 113-119
+    + ["ILD_norm mean", "ILD_norm var", "ILD_norm std", "ILD_norm≥1 prop"]    # 120-123
+    + [f"Anderson r²_norm q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9", "0.95", "0.99"]]  # 124-130
+    + ["Anderson r²_norm mean", "Anderson r²_norm var", "Anderson r²_norm std"]  # 131-133
+    + ["norm Taj.D mean", "norm Taj.D std"]                                    # 134-135
+    + [f"r² LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f})" for i in range(10)]       # 136-145
+    + ["r² LD-spec diff"]                                                      # 146
+    + [f"ILD LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f})" for i in range(10)]      # 147-156
+    + ["ILD LD-spec diff"]                                                     # 157
+    + [f"r²_norm LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f})" for i in range(10)]  # 158-167
+    + ["r²_norm LD-spec diff"]                                                 # 168
+    + [f"ILD_norm LD-spec [{0.1*i:.1f}-{0.1*(i+1):.1f})" for i in range(10)] # 169-178
+    + ["ILD_norm LD-spec diff"]                                                # 179
+    + [f"adj-r² wtd q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9"]]     # 180-184
+    + ["adj-r² wtd mean", "adj-r² wtd std"]                                   # 185-186
+    + [f"adj-r² unwtd q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9"]]   # 187-191
+    + ["adj-r² unwtd mean", "adj-r² unwtd std"]                               # 192-193
+    + [f"adj-r²_norm wtd q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9"]]  # 194-198
+    + ["adj-r²_norm wtd mean", "adj-r²_norm wtd std"]                         # 199-200
+    + [f"adj-r²_norm unwtd q{q}" for q in ["0.1", "0.3", "0.5", "0.7", "0.9"]]  # 201-205
+    + ["adj-r²_norm unwtd mean", "adj-r²_norm unwtd std"]                     # 206-207
+)
+
+
 #################
 #Parallel calling
 #################
