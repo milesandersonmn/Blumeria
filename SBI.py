@@ -513,6 +513,17 @@ def run_ppc_sim(params_np):
         return None
 
 
+def run_sbc_sim(_):
+    """Sample theta* from prior, simulate x*, return (theta*, x*) as numpy arrays."""
+    try:
+        with stdout_to_log("sim.log"):
+            theta_star = prior.sample((1,)).squeeze()
+            x_star = simulator(theta_star)
+        return theta_star.numpy(), x_star.numpy()
+    except Exception:
+        return None
+
+
 # ---- SFS confounding experiment helpers (top-level for pickling) ----
 
 def _confound_sim_worker(args):
@@ -737,6 +748,18 @@ if __name__ == "__main__":
                         help="Load saved simulations, retrain NPE, run PPC only, then exit")
     parser.add_argument("--shap-only", action="store_true",
                         help="Load saved simulations, train RF, run SHAP analysis only, then exit")
+    parser.add_argument("--sbc-only", action="store_true",
+                        help="Run simulation-based calibration and exit")
+    parser.add_argument("--sbc-trials", type=int, default=500,
+                        help="Number of SBC trials (default: 500)")
+    parser.add_argument("--sbc-samples", type=int, default=100,
+                        help="Posterior samples per SBC trial (default: 100)")
+    parser.add_argument("--nsf", action="store_true",
+                        help="Retrain using a neural spline flow and save as posterior_nsf.pt, then exit")
+    parser.add_argument("--posterior-file", type=str, default="posterior.pt",
+                        help="Posterior file to use for --ppc-only, --sbc-only, and --posterior-plots (default: posterior.pt)")
+    parser.add_argument("--posterior-plots", action="store_true",
+                        help="Load posterior and produce marginal + joint posterior plots, then exit")
     args = parser.parse_args()
 
     num_workers = os.cpu_count() - 1
@@ -748,11 +771,12 @@ if __name__ == "__main__":
     if args.ppc_only:
         import sys
         param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
-        if os.path.exists("posterior.pt"):
-            print("Loading saved posterior...")
-            posterior = torch.load("posterior.pt")
+        posterior_path = args.posterior_file
+        if os.path.exists(posterior_path):
+            print(f"Loading saved posterior from {posterior_path}...")
+            posterior = torch.load(posterior_path)
         else:
-            print("No saved posterior found — loading simulations and retraining NPE...")
+            print(f"{posterior_path} not found — loading simulations and retraining NPE...")
             theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
             x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
             print(f"Loaded theta {theta.shape}, x {x.shape}")
@@ -804,6 +828,203 @@ if __name__ == "__main__":
             joblib.dump(rf_models, rf_path)
             print(f"Saved {rf_path}")
         run_shap_analysis(x_np, theta_np, rf_models, param_names)
+        sys.exit(0)
+
+    if args.nsf:
+        import sys
+        from sbi.neural_nets import posterior_nn
+        print("Loading saved simulations...")
+        theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
+        x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+        print(f"Loaded theta {theta.shape}, x {x.shape}")
+        print("Training neural spline flow...")
+        density_estimator_build_fun = posterior_nn(
+            model="nsf",
+            hidden_features=64,
+            num_transforms=5,
+        )
+        inferrer = sbi_inference.SNPE(prior=prior, density_estimator=density_estimator_build_fun)
+        inferrer.append_simulations(theta, x)
+        density_estimator = inferrer.train()
+        posterior_nsf = inferrer.build_posterior(density_estimator)
+        torch.save(posterior_nsf, "posterior_nsf.pt")
+        print("Saved posterior_nsf.pt")
+        sys.exit(0)
+
+    if args.posterior_plots:
+        import sys
+        param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
+        posterior_path = args.posterior_file
+        stem = os.path.splitext(os.path.basename(posterior_path))[0]  # e.g. "posterior_nsf"
+
+        print(f"Loading posterior from {posterior_path}...")
+        posterior = torch.load(posterior_path)
+        x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
+
+        print("Sampling posterior...")
+        samples = posterior.sample((10_000,), x=x_obs)
+        samples_np = samples.numpy()
+
+        for i, name in enumerate(param_names):
+            print(f"{name}: mean={samples_np[:, i].mean():.4f}, "
+                  f"std={samples_np[:, i].std():.4f}, "
+                  f"95% CI=[{np.percentile(samples_np[:, i], 2.5):.4f}, "
+                  f"{np.percentile(samples_np[:, i], 97.5):.4f}]")
+
+        pd.DataFrame(samples_np, columns=param_names).to_csv(f"{stem}_samples.csv", index=False)
+        print(f"Saved {stem}_samples.csv")
+
+        # Marginal posteriors
+        fig, axes = plt.subplots(1, len(param_names), figsize=(4 * len(param_names), 5))
+        for i, (name, ax) in enumerate(zip(param_names, axes)):
+            col = samples_np[:, i]
+            mean = col.mean()
+            std = col.std()
+            ci_lo = np.percentile(col, 2.5)
+            ci_hi = np.percentile(col, 97.5)
+            ax.hist(col, bins=50, density=True, color="steelblue", alpha=0.7)
+            ax.axvline(mean, color="black", linewidth=1.2, linestyle="--", label="mean")
+            ax.axvspan(ci_lo, ci_hi, alpha=0.15, color="black", label="95% CI")
+            ax.set_title(name)
+            ax.set_xlabel("Value")
+            ax.set_ylabel("Density")
+            ax.text(0.97, 0.97,
+                    f"mean={mean:.3f}\nstd={std:.3f}\nCI=[{ci_lo:.3f}, {ci_hi:.3f}]",
+                    transform=ax.transAxes, ha="right", va="top",
+                    fontsize=7, family="monospace",
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
+        plt.tight_layout()
+        plt.savefig(f"{stem}_marginals.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print(f"Saved {stem}_marginals.png")
+
+        # Joint posterior
+        n_params = len(param_names)
+        fig, axes = plt.subplots(n_params, n_params, figsize=(12, 12))
+        for i in range(n_params):
+            for j in range(n_params):
+                ax = axes[i, j]
+                if i == j:
+                    ax.hist(samples_np[:, i], bins=50, density=True, color="steelblue", alpha=0.7)
+                elif i > j:
+                    ax.hist2d(samples_np[:, j], samples_np[:, i],
+                              bins=50, norm=LogNorm(), cmap="Blues")
+                else:
+                    ax.axis("off")
+                if j == 0:
+                    ax.set_ylabel(param_names[i])
+                if i == n_params - 1:
+                    ax.set_xlabel(param_names[j])
+        plt.tight_layout()
+        plt.savefig(f"{stem}_joint.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print(f"Saved {stem}_joint.png")
+
+        # Pairplot (posterior vs prior)
+        prior_samples_np = prior.sample((10_000,)).numpy()
+        fig, axes = plt.subplots(n_params, n_params, figsize=(3 * n_params, 3 * n_params))
+        for i in range(n_params):
+            for j in range(n_params):
+                ax = axes[i, j]
+                if i == j:
+                    ax.hist(prior_samples_np[:, i], bins=50, density=True,
+                            color="grey", alpha=0.4, label="Prior")
+                    ax.hist(samples_np[:, i], bins=50, density=True,
+                            color="steelblue", alpha=0.7, label="Posterior")
+                    if i == 0:
+                        ax.legend(fontsize=7)
+                elif i > j:
+                    ax.hist2d(samples_np[:, j], samples_np[:, i],
+                              bins=40, norm=LogNorm(), cmap="Blues")
+                else:
+                    ax.axis("off")
+                if j == 0:
+                    ax.set_ylabel(param_names[i], fontsize=8)
+                if i == n_params - 1:
+                    ax.set_xlabel(param_names[j], fontsize=8)
+                ax.tick_params(labelsize=6)
+        plt.suptitle(f"Posterior pairplot — {stem}", y=1.002)
+        plt.tight_layout()
+        plt.savefig(f"{stem}_pairplot.png", dpi=150, bbox_inches="tight")
+        plt.close()
+        print(f"Saved {stem}_pairplot.png")
+        sys.exit(0)
+
+    if args.sbc_only:
+        import sys
+        param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
+        n_trials  = args.sbc_trials
+        L         = args.sbc_samples
+
+        # Load posterior
+        posterior_path = args.posterior_file
+        if os.path.exists(posterior_path):
+            print(f"Loading saved posterior from {posterior_path}...")
+            posterior = torch.load(posterior_path)
+        else:
+            print(f"{posterior_path} not found — loading simulations and retraining NPE...")
+            theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
+            x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+            inferrer = sbi_inference.SNPE(prior=prior)
+            inferrer.append_simulations(theta, x)
+            density_estimator = inferrer.train()
+            posterior = inferrer.build_posterior(density_estimator)
+            torch.save(posterior, "posterior.pt")
+            print("Saved posterior.pt")
+
+        # Run SBC trials in parallel (simulate theta*, x*)
+        print(f"Running {n_trials} SBC trials across {num_workers} cores...")
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            sbc_results = list(tqdm(executor.map(run_sbc_sim, range(n_trials)),
+                                    total=n_trials, desc="SBC simulations"))
+
+        sbc_results = [r for r in sbc_results if r is not None]
+        print(f"{len(sbc_results)} successful trials")
+
+        # Compute ranks
+        ranks = {name: [] for name in param_names}
+        for theta_star_np, x_star_np in tqdm(sbc_results, desc="Computing ranks"):
+            x_star = torch.tensor(x_star_np, dtype=torch.float32)
+            theta_star = torch.tensor(theta_star_np, dtype=torch.float32)
+            post_samples = posterior.sample((L,), x=x_star).numpy()
+            for i, name in enumerate(param_names):
+                rank = int((post_samples[:, i] < theta_star_np[i]).sum())
+                ranks[name].append(rank)
+
+        # Save ranks
+        pd.DataFrame(ranks).to_csv("sbc_ranks.csv", index=False)
+        print("Saved sbc_ranks.csv")
+
+        # Plot rank histograms
+        n_params = len(param_names)
+        ncols = 4
+        nrows = math.ceil(n_params / ncols)
+        fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows))
+        expected = len(sbc_results) / (L + 1)  # expected count per bin if uniform
+
+        for pi, (name, ax) in enumerate(zip(param_names, axes.flat)):
+            ax.hist(ranks[name], bins=10, range=(0, L),
+                    color='#0072B2', alpha=0.8, edgecolor='white')
+            ax.axhline(expected, color='#D55E00', linewidth=1.5,
+                       linestyle='--', label='Uniform expected')
+            ax.set_title(name, fontsize=10)
+            ax.set_xlabel("Rank", fontsize=8)
+            ax.set_ylabel("Count", fontsize=8)
+            if pi == 0:
+                ax.legend(fontsize=7)
+
+        for pi in range(n_params, nrows * ncols):
+            axes.flat[pi].axis("off")
+
+        plt.suptitle(
+            f"Simulation-based calibration ({len(sbc_results)} trials, {L} posterior samples each)\n"
+            "Uniform rank histogram = well-calibrated posterior",
+            fontsize=11, y=1.02
+        )
+        plt.tight_layout()
+        plt.savefig("sbc_ranks.png", dpi=150, bbox_inches="tight")
+        plt.show()
+        print("Saved sbc_ranks.png")
         sys.exit(0)
 
     # Run new simulations in parallel
