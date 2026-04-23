@@ -7,3 +7,4 @@ summary_stats/
 sim.log
 posterior.pt
 rf_models.pkl
+manuscript/
