@@ -981,29 +981,38 @@ if __name__ == "__main__":
         sbc_results = [r for r in sbc_results if r is not None]
         print(f"{len(sbc_results)} successful trials")
 
-        # Compute ranks
+        # Compute ranks, true thetas, and posterior means
         ranks = {name: [] for name in param_names}
+        true_thetas = {name: [] for name in param_names}
+        post_means  = {name: [] for name in param_names}
         for theta_star_np, x_star_np in tqdm(sbc_results, desc="Computing ranks"):
             x_star = torch.tensor(x_star_np, dtype=torch.float32)
-            theta_star = torch.tensor(theta_star_np, dtype=torch.float32)
             post_samples = posterior.sample((L,), x=x_star).numpy()
             for i, name in enumerate(param_names):
                 rank = int((post_samples[:, i] < theta_star_np[i]).sum())
                 ranks[name].append(rank)
+                true_thetas[name].append(theta_star_np[i])
+                post_means[name].append(post_samples[:, i].mean())
 
         # Save ranks
         pd.DataFrame(ranks).to_csv("sbc_ranks.csv", index=False)
         print("Saved sbc_ranks.csv")
+
+        # Save true thetas and posterior means for downstream analysis
+        pd.DataFrame(true_thetas).to_csv("sbc_true_thetas.csv", index=False)
+        pd.DataFrame(post_means).to_csv("sbc_post_means.csv", index=False)
+        print("Saved sbc_true_thetas.csv and sbc_post_means.csv")
 
         # Plot rank histograms
         n_params = len(param_names)
         ncols = 4
         nrows = math.ceil(n_params / ncols)
         fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows))
-        expected = len(sbc_results) / (L + 1)  # expected count per bin if uniform
+        n_bins = 10
+        expected = len(sbc_results) / n_bins  # expected count per bin if uniform
 
         for pi, (name, ax) in enumerate(zip(param_names, axes.flat)):
-            ax.hist(ranks[name], bins=10, range=(0, L),
+            ax.hist(ranks[name], bins=n_bins, range=(0, L),
                     color='#0072B2', alpha=0.8, edgecolor='white')
             ax.axhline(expected, color='#D55E00', linewidth=1.5,
                        linestyle='--', label='Uniform expected')
