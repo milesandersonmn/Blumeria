@@ -1,0 +1,2 @@
+# Tell GitHub Linguist not to count simulation output files in language stats
+sweep/*.ms linguist-detectable=false
