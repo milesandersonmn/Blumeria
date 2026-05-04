@@ -1092,5 +1092,10 @@ summary_statistics.extend([
 print(summary_statistics)
 
 import pandas as pd
+import os as _os
+_base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 df = pd.DataFrame(summary_statistics).T
-df.to_csv("observed_sum_stats_SBI.csv", index=False)
+out_csv = _os.path.join(_base, "results", "observed_sum_stats_SBI.csv")
+_os.makedirs(_os.path.dirname(out_csv), exist_ok=True)
+df.to_csv(out_csv, index=False)
+print(f"Saved {out_csv}")

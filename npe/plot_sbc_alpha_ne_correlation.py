@@ -22,10 +22,16 @@ Usage:
 """
 
 import argparse
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BASE_DIR    = os.path.dirname(_SCRIPT_DIR)
+RESULTS_DIR  = os.path.join(_BASE_DIR, "results")
+FIGURES_DIR  = os.path.join(_BASE_DIR, "figures")
 
 WINDOW_LABELS = {
     'Ne1':  '10–50 gen',
@@ -56,13 +62,20 @@ def permutation_r(x, y, n=N_PERMUTATIONS, seed=42):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--true-thetas", default="sbc_true_thetas.csv",
-                        help="CSV of true SBC parameter values (default: sbc_true_thetas.csv)")
-    parser.add_argument("--post-means", default="sbc_post_means.csv",
-                        help="CSV of posterior means per SBC trial (default: sbc_post_means.csv)")
-    parser.add_argument("--out", default="sbc_alpha_ne_correlation.png",
-                        help="Output PNG path (default: sbc_alpha_ne_correlation.png)")
+    parser.add_argument("--true-thetas", default=None,
+                        help="CSV of true SBC parameter values (default: results/sbc_true_thetas.csv)")
+    parser.add_argument("--post-means", default=None,
+                        help="CSV of posterior means per SBC trial (default: results/sbc_post_means.csv)")
+    parser.add_argument("--out", default=None,
+                        help="Output PNG path (default: figures/sbc_alpha_ne_correlation.png)")
     args = parser.parse_args()
+
+    if args.true_thetas is None:
+        args.true_thetas = os.path.join(RESULTS_DIR, "sbc_true_thetas.csv")
+    if args.post_means is None:
+        args.post_means = os.path.join(RESULTS_DIR, "sbc_post_means.csv")
+    if args.out is None:
+        args.out = os.path.join(FIGURES_DIR, "sbc_alpha_ne_correlation.png")
 
     true_df = pd.read_csv(args.true_thetas)
     post_df = pd.read_csv(args.post_means)

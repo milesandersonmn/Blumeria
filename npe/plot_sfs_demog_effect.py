@@ -2,11 +2,18 @@
 Simulate SFS with alpha=1.641 under flat demography and compare to the
 best-match variable-demography simulation.
 """
+import os
 import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-sys.path.insert(0, '.')
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BASE_DIR    = os.path.dirname(_SCRIPT_DIR)
+RESULTS_DIR  = os.path.join(_BASE_DIR, "results")
+FIGURES_DIR  = os.path.join(_BASE_DIR, "figures")
+
+sys.path.insert(0, _SCRIPT_DIR)
 from SBI import sim_summary_stats, stdout_to_log
 
 ALPHA    = 1.6409
@@ -15,9 +22,9 @@ N_SIMS   = 50
 N_WORKERS = 7
 
 # --- Best-match variable-demography simulation ---
-x     = np.load('x.npy')
-theta = np.load('theta.npy')
-obs   = pd.read_csv('observed_sum_stats_SBI.csv').values.squeeze()
+x     = np.load(os.path.join(RESULTS_DIR, 'x.npy'))
+theta = np.load(os.path.join(RESULTS_DIR, 'theta.npy'))
+obs   = pd.read_csv(os.path.join(RESULTS_DIR, 'observed_sum_stats_SBI.csv')).values.squeeze()
 
 sfs_obs  = obs[:42]
 dists    = np.sqrt(((x[:, :42] - sfs_obs) ** 2).sum(axis=1))
@@ -43,7 +50,7 @@ print(f"Running {N_SIMS} flat-demography simulations (alpha={ALPHA})...")
 results = []
 for i in range(N_SIMS):
     print(f"  sim {i+1}/{N_SIMS}", end='\r')
-    with stdout_to_log('sim.log'):
+    with stdout_to_log(os.path.join(RESULTS_DIR, 'sim.log')):
         stats = sim_summary_stats(ALPHA, K,
                                   1, 1, 1, 1, 1, 1, 1,   # Ne1-Ne7
                                   1, 1, 1, 1)             # Ne8-Ne11
@@ -84,6 +91,7 @@ ax2.set_ylabel('Variable $N_e$ $-$ Constant $N_e$', fontsize=11)
 ax2.set_title('SFS difference: demographic effect', fontsize=12)
 
 plt.tight_layout()
-plt.savefig('sfs_demog_effect.png', dpi=150, bbox_inches='tight')
+out = os.path.join(FIGURES_DIR, 'sfs_demog_effect.png')
+plt.savefig(out, dpi=150, bbox_inches='tight')
 plt.show()
-print('Saved sfs_demog_effect.png')
+print(f'Saved {out}')

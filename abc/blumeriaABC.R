@@ -199,7 +199,7 @@ p <- ggplot(votes, aes(x = model, y = votes, fill = selected)) +
     axis.line     = element_line(linewidth = 0.4)
   )
 p
-ggsave("abc_rf_selection_fullSFS.png", plot = p,
+ggsave("figures/abc_rf_selection_fullSFS.png", plot = p,
        width = 5.5, height = 4, dpi = 600, bg = "white")
 ####################################
 votes <- data.frame(
@@ -230,12 +230,12 @@ p <- ggplot(votes, aes(x = model, y = votes, fill = selected)) +
     axis.text = element_text(color = "black"),
     axis.line = element_line(linewidth = 0.4)
   )
-ggsave("abc_rf_selection_fullSFS.pdf", width = 5.5, height = 4, device = cairo_pdf)
+ggsave("figures/abc_rf_selection_fullSFS.pdf", width = 5.5, height = 4, device = cairo_pdf)
 # Also save a high-res PNG/TIFF if the journal needs raster:
-ggsave("abc_rf_selection_fullSFS.tiff", width = 5.5, height = 4, dpi = 600, compression = "lzw")
+ggsave("figures/abc_rf_selection_fullSFS.tiff", width = 5.5, height = 4, dpi = 600, compression = "lzw")
 
 ggsave(
-  filename = "abc_rf_selection_fullSFS.png",
+  filename = "figures/abc_rf_selection_fullSFS.png",
   plot     = p,
   width    = 5.5,        # inches — fits a single column nicely
   height   = 4,
@@ -401,11 +401,11 @@ p_combined <- ggplot(votes_all,
 
 p_combined
 
-ggsave("abc_rf_combined_votes.png",  plot = p_combined,
+ggsave("figures/abc_rf_combined_votes.png",  plot = p_combined,
        width = 8, height = 5, dpi = 600, bg = "white")
-ggsave("abc_rf_combined_votes.pdf",  plot = p_combined,
+ggsave("figures/abc_rf_combined_votes.pdf",  plot = p_combined,
        width = 8, height = 5, device = cairo_pdf)
-ggsave("abc_rf_combined_votes.tiff", plot = p_combined,
+ggsave("figures/abc_rf_combined_votes.tiff", plot = p_combined,
        width = 8, height = 5, dpi = 600, compression = "lzw")
 
 

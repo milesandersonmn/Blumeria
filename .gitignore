@@ -2,9 +2,21 @@
 test_r2.py
 Bh_TRR356_srDNA_for_abc/
 summary_stats/
-*csv
-*npy
-sim.log
-posterior.pt
-rf_models.pkl
+__pycache__/
+sbi-logs/
+SMBC/
+
+# Results (data files generated at runtime)
+results/
+*.npy
+*.csv
+
+# Figures (regenerated from scripts)
+figures/
+
+# Trained model artifacts
+*.pt
+*.pkl
+
+# Manuscript (managed separately)
 manuscript/

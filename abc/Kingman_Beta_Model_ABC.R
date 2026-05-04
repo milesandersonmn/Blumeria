@@ -318,9 +318,9 @@ p_kb <- ggplot(votes_kb, aes(x = model, y = pct, fill = selected)) +
 
 p_kb
 
-ggsave("abc_rf_kingman_beta_votes.png",  plot = p_kb,
+ggsave("figures/abc_rf_kingman_beta_votes.png",  plot = p_kb,
        width = 5.5, height = 4, dpi = 600, bg = "white")
-ggsave("abc_rf_kingman_beta_votes.pdf",  plot = p_kb,
+ggsave("figures/abc_rf_kingman_beta_votes.pdf",  plot = p_kb,
        width = 5.5, height = 4, device = cairo_pdf)
-ggsave("abc_rf_kingman_beta_votes.tiff", plot = p_kb,
+ggsave("figures/abc_rf_kingman_beta_votes.tiff", plot = p_kb,
        width = 5.5, height = 4, dpi = 600, compression = "lzw")

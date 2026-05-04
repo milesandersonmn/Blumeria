@@ -480,6 +480,14 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from concurrent.futures import ProcessPoolExecutor
 
+# ── Directory layout (paths relative to this script's location) ───────────────
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BASE_DIR    = os.path.dirname(_SCRIPT_DIR)   # project root
+RESULTS_DIR  = os.path.join(_BASE_DIR, "results")
+FIGURES_DIR  = os.path.join(_BASE_DIR, "figures")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(FIGURES_DIR, exist_ok=True)
+
 # Define priors
 prior = BoxUniform(
     #low=torch.tensor([1.3, 10.0, 0.001, 10.0]),   # alpha, t_b, severity, duration
@@ -498,7 +506,7 @@ def simulator(params):
     return torch.tensor(np.array(stats), dtype=torch.float32).flatten()
 
 def run_single_sim(_):
-    with stdout_to_log("sim.log"):
+    with stdout_to_log(os.path.join(RESULTS_DIR, "sim.log")):
         params = prior.sample((1,)).squeeze()
         stats = simulator(params)
     return params, stats
@@ -506,7 +514,7 @@ def run_single_sim(_):
 
 def run_ppc_sim(params_np):
     try:
-        with stdout_to_log("sim.log"):
+        with stdout_to_log(os.path.join(RESULTS_DIR, "sim.log")):
             p = torch.tensor(params_np, dtype=torch.float32)
             return simulator(p).numpy()
     except Exception:
@@ -516,7 +524,7 @@ def run_ppc_sim(params_np):
 def run_sbc_sim(_):
     """Sample theta* from prior, simulate x*, return (theta*, x*) as numpy arrays."""
     try:
-        with stdout_to_log("sim.log"):
+        with stdout_to_log(os.path.join(RESULTS_DIR, "sim.log")):
             theta_star = prior.sample((1,)).squeeze()
             x_star = simulator(theta_star)
         return theta_star.numpy(), x_star.numpy()
@@ -529,7 +537,7 @@ def run_sbc_sim(_):
 def _confound_sim_worker(args):
     """Single simulation for the SFS confounding grid."""
     alpha, ne_recent = args
-    with stdout_to_log("sim.log"):
+    with stdout_to_log(os.path.join(RESULTS_DIR, "sim.log")):
         # ne_recent applied to Ne1-Ne7 (10-1000 gen); Ne8-Ne11 held flat at 1.0
         stats = sim_summary_stats(alpha, 1,
                                   ne_recent, ne_recent, ne_recent, ne_recent,
@@ -613,14 +621,16 @@ def run_sfs_confounding_experiment(num_workers, n_sims=20):
         fontsize=12, y=1.02
     )
     plt.tight_layout()
-    plt.savefig("sfs_confounding.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGURES_DIR, "sfs_confounding.png"), dpi=150, bbox_inches="tight")
     plt.show()
     print("Saved sfs_confounding.png")
 
 
-def plot_ppc(ppc_stats, x_obs_np, out_path="posterior_predictive_check.pdf"):
+def plot_ppc(ppc_stats, x_obs_np, out_path=None):
     """Save all summary statistics to a multi-page PDF, 20 panels per page."""
     from matplotlib.backends.backend_pdf import PdfPages
+    if out_path is None:
+        out_path = os.path.join(FIGURES_DIR, "posterior_predictive_check.pdf")
     n_stats = ppc_stats.shape[1]
     per_page = 20
     ncols, nrows = 5, 4
@@ -698,7 +708,7 @@ def run_shap_analysis(x_np, theta_np, rf_models, param_names, num_workers=1):
         y=1.01, fontsize=11
     )
     plt.tight_layout()
-    plt.savefig("shap_alpha_Ne_interaction.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGURES_DIR, "shap_alpha_Ne_interaction.png"), dpi=150, bbox_inches="tight")
     plt.show()
     print("Saved shap_alpha_Ne_interaction.png")
 
@@ -756,11 +766,15 @@ if __name__ == "__main__":
                         help="Posterior samples per SBC trial (default: 100)")
     parser.add_argument("--nsf", action="store_true",
                         help="Retrain using a neural spline flow and save as posterior_nsf.pt, then exit")
-    parser.add_argument("--posterior-file", type=str, default="posterior.pt",
-                        help="Posterior file to use for --ppc-only, --sbc-only, and --posterior-plots (default: posterior.pt)")
+    parser.add_argument("--posterior-file", type=str, default=None,
+                        help="Posterior file to use for --ppc-only, --sbc-only, and --posterior-plots "
+                             "(default: results/posterior.pt)")
     parser.add_argument("--posterior-plots", action="store_true",
                         help="Load posterior and produce marginal + joint posterior plots, then exit")
     args = parser.parse_args()
+
+    if args.posterior_file is None:
+        args.posterior_file = os.path.join(RESULTS_DIR, "posterior.pt")
 
     num_workers = os.cpu_count() - 1
 
@@ -777,17 +791,17 @@ if __name__ == "__main__":
             posterior = torch.load(posterior_path)
         else:
             print(f"{posterior_path} not found — loading simulations and retraining NPE...")
-            theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
-            x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+            theta = torch.tensor(np.load(os.path.join(RESULTS_DIR, "theta.npy")), dtype=torch.float32)
+            x     = torch.tensor(np.load(os.path.join(RESULTS_DIR, "x.npy")),     dtype=torch.float32)
             print(f"Loaded theta {theta.shape}, x {x.shape}")
             inferrer = sbi_inference.SNPE(prior=prior)
             inferrer.append_simulations(theta, x)
             density_estimator = inferrer.train()
             posterior = inferrer.build_posterior(density_estimator)
-            torch.save(posterior, "posterior.pt")
-            print("Saved posterior.pt")
+            torch.save(posterior, os.path.join(RESULTS_DIR, "posterior.pt"))
+            print(f"Saved {os.path.join(RESULTS_DIR, 'posterior.pt')}")
 
-        x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
+        x_obs = torch.tensor(pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values, dtype=torch.float32).squeeze()
 
         n_ppc = 500
         ppc_params = posterior.sample((n_ppc,), x=x_obs)
@@ -809,11 +823,11 @@ if __name__ == "__main__":
         from sklearn.ensemble import RandomForestRegressor
         param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
         print("Loading saved simulations...")
-        x_np    = np.load("x.npy")
-        theta_np = np.load("theta.npy")
+        x_np    = np.load(os.path.join(RESULTS_DIR, "x.npy"))
+        theta_np = np.load(os.path.join(RESULTS_DIR, "theta.npy"))
         print(f"Loaded theta {theta_np.shape}, x {x_np.shape}")
         import joblib
-        rf_path = "rf_models.pkl"
+        rf_path = os.path.join(RESULTS_DIR, "rf_models.pkl")
         if os.path.exists(rf_path):
             print("Loading saved random forests...")
             rf_models = joblib.load(rf_path)
@@ -834,8 +848,8 @@ if __name__ == "__main__":
         import sys
         from sbi.neural_nets import posterior_nn
         print("Loading saved simulations...")
-        theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
-        x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+        theta = torch.tensor(np.load(os.path.join(RESULTS_DIR, "theta.npy")), dtype=torch.float32)
+        x     = torch.tensor(np.load(os.path.join(RESULTS_DIR, "x.npy")),     dtype=torch.float32)
         print(f"Loaded theta {theta.shape}, x {x.shape}")
         print("Training neural spline flow...")
         density_estimator_build_fun = posterior_nn(
@@ -847,8 +861,9 @@ if __name__ == "__main__":
         inferrer.append_simulations(theta, x)
         density_estimator = inferrer.train()
         posterior_nsf = inferrer.build_posterior(density_estimator)
-        torch.save(posterior_nsf, "posterior_nsf.pt")
-        print("Saved posterior_nsf.pt")
+        nsf_path = os.path.join(RESULTS_DIR, "posterior_nsf.pt")
+        torch.save(posterior_nsf, nsf_path)
+        print(f"Saved {nsf_path}")
         sys.exit(0)
 
     if args.posterior_plots:
@@ -856,10 +871,11 @@ if __name__ == "__main__":
         param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
         posterior_path = args.posterior_file
         stem = os.path.splitext(os.path.basename(posterior_path))[0]  # e.g. "posterior_nsf"
+        fig_stem = os.path.join(FIGURES_DIR, stem)   # figure output prefix
 
         print(f"Loading posterior from {posterior_path}...")
         posterior = torch.load(posterior_path)
-        x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
+        x_obs = torch.tensor(pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values, dtype=torch.float32).squeeze()
 
         print("Sampling posterior...")
         samples = posterior.sample((10_000,), x=x_obs)
@@ -871,8 +887,9 @@ if __name__ == "__main__":
                   f"95% CI=[{np.percentile(samples_np[:, i], 2.5):.4f}, "
                   f"{np.percentile(samples_np[:, i], 97.5):.4f}]")
 
-        pd.DataFrame(samples_np, columns=param_names).to_csv(f"{stem}_samples.csv", index=False)
-        print(f"Saved {stem}_samples.csv")
+        samples_csv = os.path.join(RESULTS_DIR, f"{stem}_samples.csv")
+        pd.DataFrame(samples_np, columns=param_names).to_csv(samples_csv, index=False)
+        print(f"Saved {samples_csv}")
 
         # Marginal posteriors — combined panel
         fig, axes = plt.subplots(1, len(param_names), figsize=(4 * len(param_names), 5))
@@ -894,12 +911,12 @@ if __name__ == "__main__":
                     fontsize=7, family="monospace",
                     bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
         plt.tight_layout()
-        plt.savefig(f"{stem}_marginals.png", dpi=150, bbox_inches="tight")
+        plt.savefig(f"{fig_stem}_marginals.png", dpi=150, bbox_inches="tight")
         plt.close()
-        print(f"Saved {stem}_marginals.png")
+        print(f"Saved {fig_stem}_marginals.png")
 
         # Marginal posteriors — individual plots per parameter
-        os.makedirs(f"{stem}_marginals", exist_ok=True)
+        os.makedirs(f"{fig_stem}_marginals", exist_ok=True)
         for i, name in enumerate(param_names):
             col = samples_np[:, i]
             mean = col.mean()
@@ -919,7 +936,7 @@ if __name__ == "__main__":
                     fontsize=8, family="monospace",
                     bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
             plt.tight_layout()
-            out = os.path.join(f"{stem}_marginals", f"{stem}_marginal_{name}.png")
+            out = os.path.join(f"{fig_stem}_marginals", f"{stem}_marginal_{name}.png")
             plt.savefig(out, dpi=150, bbox_inches="tight")
             plt.close()
         print(f"Saved individual marginals to {stem}_marginals/")
@@ -948,7 +965,7 @@ if __name__ == "__main__":
             if name == "alpha":
                 ax.legend(fontsize=8)
         plt.tight_layout()
-        alpha_ne1_path = f"{stem}_marginal_alpha_Ne1.png"
+        alpha_ne1_path = f"{fig_stem}_marginal_alpha_Ne1.png"
         plt.savefig(alpha_ne1_path, dpi=150, bbox_inches="tight")
         plt.close()
         print(f"Saved {alpha_ne1_path}")
@@ -971,9 +988,9 @@ if __name__ == "__main__":
                 if i == n_params - 1:
                     ax.set_xlabel(param_names[j])
         plt.tight_layout()
-        plt.savefig(f"{stem}_joint.png", dpi=150, bbox_inches="tight")
+        plt.savefig(f"{fig_stem}_joint.png", dpi=150, bbox_inches="tight")
         plt.close()
-        print(f"Saved {stem}_joint.png")
+        print(f"Saved {fig_stem}_joint.png")
 
         # Pairplot (posterior vs prior)
         prior_samples_np = prior.sample((10_000,)).numpy()
@@ -1000,9 +1017,9 @@ if __name__ == "__main__":
                 ax.tick_params(labelsize=6)
         plt.suptitle(f"Posterior pairplot — {stem}", y=1.002)
         plt.tight_layout()
-        plt.savefig(f"{stem}_pairplot.png", dpi=150, bbox_inches="tight")
+        plt.savefig(f"{fig_stem}_pairplot.png", dpi=150, bbox_inches="tight")
         plt.close()
-        print(f"Saved {stem}_pairplot.png")
+        print(f"Saved {fig_stem}_pairplot.png")
         sys.exit(0)
 
     if args.sbc_only:
@@ -1018,14 +1035,14 @@ if __name__ == "__main__":
             posterior = torch.load(posterior_path)
         else:
             print(f"{posterior_path} not found — loading simulations and retraining NPE...")
-            theta = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
-            x     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+            theta = torch.tensor(np.load(os.path.join(RESULTS_DIR, "theta.npy")), dtype=torch.float32)
+            x     = torch.tensor(np.load(os.path.join(RESULTS_DIR, "x.npy")),     dtype=torch.float32)
             inferrer = sbi_inference.SNPE(prior=prior)
             inferrer.append_simulations(theta, x)
             density_estimator = inferrer.train()
             posterior = inferrer.build_posterior(density_estimator)
-            torch.save(posterior, "posterior.pt")
-            print("Saved posterior.pt")
+            torch.save(posterior, os.path.join(RESULTS_DIR, "posterior.pt"))
+            print(f"Saved {os.path.join(RESULTS_DIR, 'posterior.pt')}")
 
         # Run SBC trials in parallel (simulate theta*, x*)
         print(f"Running {n_trials} SBC trials across {num_workers} cores...")
@@ -1050,13 +1067,13 @@ if __name__ == "__main__":
                 post_means[name].append(post_samples[:, i].mean())
 
         # Save ranks
-        pd.DataFrame(ranks).to_csv("sbc_ranks.csv", index=False)
-        print("Saved sbc_ranks.csv")
+        pd.DataFrame(ranks).to_csv(os.path.join(RESULTS_DIR, "sbc_ranks.csv"), index=False)
+        print(f"Saved {os.path.join(RESULTS_DIR, 'sbc_ranks.csv')}")
 
         # Save true thetas and posterior means for downstream analysis
-        pd.DataFrame(true_thetas).to_csv("sbc_true_thetas.csv", index=False)
-        pd.DataFrame(post_means).to_csv("sbc_post_means.csv", index=False)
-        print("Saved sbc_true_thetas.csv and sbc_post_means.csv")
+        pd.DataFrame(true_thetas).to_csv(os.path.join(RESULTS_DIR, "sbc_true_thetas.csv"), index=False)
+        pd.DataFrame(post_means).to_csv(os.path.join(RESULTS_DIR, "sbc_post_means.csv"), index=False)
+        print(f"Saved {os.path.join(RESULTS_DIR, 'sbc_true_thetas.csv')} and {os.path.join(RESULTS_DIR, 'sbc_post_means.csv')}")
 
         # Plot rank histograms
         n_params = len(param_names)
@@ -1086,7 +1103,7 @@ if __name__ == "__main__":
             fontsize=11, y=1.02
         )
         plt.tight_layout()
-        plt.savefig("sbc_ranks.png", dpi=150, bbox_inches="tight")
+        plt.savefig(os.path.join(FIGURES_DIR, "sbc_ranks.png"), dpi=150, bbox_inches="tight")
         plt.show()
         print("Saved sbc_ranks.png")
         sys.exit(0)
@@ -1104,9 +1121,9 @@ if __name__ == "__main__":
     x_new = torch.stack(xs_new)
 
     # Load and concatenate with previous simulations if they exist and dimensions match
-    if os.path.exists("theta.npy") and os.path.exists("x.npy"):
-        theta_old = torch.tensor(np.load("theta.npy"), dtype=torch.float32)
-        x_old     = torch.tensor(np.load("x.npy"),     dtype=torch.float32)
+    if os.path.exists(os.path.join(RESULTS_DIR, "theta.npy")) and os.path.exists(os.path.join(RESULTS_DIR, "x.npy")):
+        theta_old = torch.tensor(np.load(os.path.join(RESULTS_DIR, "theta.npy")), dtype=torch.float32)
+        x_old     = torch.tensor(np.load(os.path.join(RESULTS_DIR, "x.npy")),     dtype=torch.float32)
         if x_old.shape[1] == x_new.shape[1] and theta_old.shape[1] == theta_new.shape[1]:
             theta = torch.cat([theta_old, theta_new], dim=0)
             x     = torch.cat([x_old,     x_new],     dim=0)
@@ -1124,8 +1141,8 @@ if __name__ == "__main__":
     print(f"Final x shape: {x.shape}")
 
     # Overwrite saved simulations with the full combined set
-    np.save("theta.npy", theta.numpy())
-    np.save("x.npy",     x.numpy())
+    np.save(os.path.join(RESULTS_DIR, "theta.npy"), theta.numpy())
+    np.save(os.path.join(RESULTS_DIR, "x.npy"),     x.numpy())
 
     # Train NPE on the full combined set
     inferrer = sbi_inference.SNPE(prior=prior)
@@ -1155,8 +1172,8 @@ if __name__ == "__main__":
     print(f"Final x shape: {x.shape}")
 
     # Save simulations to disk
-    np.save("theta.npy", theta.numpy())
-    np.save("x.npy", x.numpy())
+    np.save(os.path.join(RESULTS_DIR, "theta.npy"), theta.numpy())
+    np.save(os.path.join(RESULTS_DIR, "x.npy"), x.numpy())
 
     # Train NPE
     inferrer = sbi_inference.SNPE(prior=prior)
@@ -1164,12 +1181,12 @@ if __name__ == "__main__":
     density_estimator = inferrer.train()
     """
     posterior = inferrer.build_posterior(density_estimator)
-    torch.save(posterior, "posterior.pt")
-    print("Saved posterior.pt")
+    torch.save(posterior, os.path.join(RESULTS_DIR, "posterior.pt"))
+    print(f"Saved {os.path.join(RESULTS_DIR, 'posterior.pt')}")
     
 
     # Sample posterior given observed stats
-    x_obs = torch.tensor(pd.read_csv("observed_sum_stats_SBI.csv").values, dtype=torch.float32).squeeze()
+    x_obs = torch.tensor(pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values, dtype=torch.float32).squeeze()
     samples = posterior.sample((10_000,), x=x_obs)
     samples_np = samples.numpy()
     param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
@@ -1182,8 +1199,8 @@ if __name__ == "__main__":
               f"{np.percentile(samples_np[:, i], 97.5):.4f}]")
 
     # Save posterior samples
-    pd.DataFrame(samples_np, columns=param_names).to_csv("posterior_samples.csv", index=False)
-    print("Saved posterior_samples.csv")
+    pd.DataFrame(samples_np, columns=param_names).to_csv(os.path.join(RESULTS_DIR, "posterior_samples.csv"), index=False)
+    print(f"Saved {os.path.join(RESULTS_DIR, 'posterior_samples.csv')}")
 
     # Plot marginal posteriors
     fig, axes = plt.subplots(1, len(param_names), figsize=(4 * len(param_names), 4))
@@ -1193,7 +1210,7 @@ if __name__ == "__main__":
         ax.set_xlabel("Value")
         ax.set_ylabel("Density")
     plt.tight_layout()
-    plt.savefig("posterior_marginals.png", dpi=150)
+    plt.savefig(os.path.join(FIGURES_DIR, "posterior_marginals.png"), dpi=150)
     plt.show()
     print("Saved posterior_marginals.png")
 
@@ -1216,7 +1233,7 @@ if __name__ == "__main__":
             if i == n_params - 1:
                 ax.set_xlabel(param_names[j])
     plt.tight_layout()
-    plt.savefig("joint_posterior.png", dpi=150)
+    plt.savefig(os.path.join(FIGURES_DIR, "joint_posterior.png"), dpi=150)
     plt.show()
     print("Saved joint_posterior.png")
     
@@ -1250,7 +1267,7 @@ if __name__ == "__main__":
     ax.set_title("Random forest feature importance")
     plt.colorbar(im, ax=ax, label="Importance")
     plt.tight_layout()
-    plt.savefig("rf_importance.png", dpi=150)
+    plt.savefig(os.path.join(FIGURES_DIR, "rf_importance.png"), dpi=150)
     plt.show()
     print("Saved rf_importance.png")
     
@@ -1310,6 +1327,6 @@ if __name__ == "__main__":
             ax.tick_params(labelsize=6)
     plt.suptitle("Posterior pairplot (with prior overlay on diagonal)", y=1.002)
     plt.tight_layout()
-    plt.savefig("pairplot.png", dpi=150, bbox_inches="tight")
+    plt.savefig(os.path.join(FIGURES_DIR, "pairplot.png"), dpi=150, bbox_inches="tight")
     plt.show()
     print("Saved pairplot.png")

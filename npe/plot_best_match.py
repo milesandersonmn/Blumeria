@@ -1,10 +1,16 @@
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-x = np.load('x.npy')
-theta = np.load('theta.npy')
-obs = pd.read_csv('observed_sum_stats_SBI.csv').values.squeeze()
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BASE_DIR    = os.path.dirname(_SCRIPT_DIR)
+RESULTS_DIR  = os.path.join(_BASE_DIR, "results")
+FIGURES_DIR  = os.path.join(_BASE_DIR, "figures")
+
+x = np.load(os.path.join(RESULTS_DIR, 'x.npy'))
+theta = np.load(os.path.join(RESULTS_DIR, 'theta.npy'))
+obs = pd.read_csv(os.path.join(RESULTS_DIR, 'observed_sum_stats_SBI.csv')).values.squeeze()
 
 sfs_obs = obs[:42]
 dists = np.sqrt(((x[:, :42] - sfs_obs) ** 2).sum(axis=1))
@@ -53,6 +59,7 @@ ax2.set_title(
 )
 
 plt.tight_layout()
-plt.savefig('best_match_plot.png', dpi=150, bbox_inches='tight')
+out = os.path.join(FIGURES_DIR, 'best_match_plot.png')
+plt.savefig(out, dpi=150, bbox_inches='tight')
 plt.show()
-print('Saved best_match_plot.png')
+print(f'Saved {out}')

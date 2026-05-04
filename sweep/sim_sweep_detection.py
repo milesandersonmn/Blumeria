@@ -19,9 +19,14 @@ Usage:
 
 import argparse
 import math
+import os
 import numpy as np
 import pandas as pd
 import msprime
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_BASE_DIR    = os.path.dirname(_SCRIPT_DIR)
+RESULTS_DIR  = os.path.join(_BASE_DIR, "results")
 
 # ---- Chromosome / rate parameters ----
 DEFAULT_CHROM_LEN   = 5_000_000   # total chromosome length (bp)
@@ -40,9 +45,9 @@ BREAKPOINTS         = [10, 50, 100, 200, 300, 400, 500,
 
 def get_best_match_params():
     """Load best-fit alpha and Ne multipliers from x.npy / theta.npy."""
-    x     = np.load("x.npy")
-    theta = np.load("theta.npy")
-    obs   = pd.read_csv("observed_sum_stats_SBI.csv").values.squeeze()
+    x     = np.load(os.path.join(RESULTS_DIR, "x.npy"))
+    theta = np.load(os.path.join(RESULTS_DIR, "theta.npy"))
+    obs   = pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values.squeeze()
     sfs_obs = obs[:42]
     dists   = np.sqrt(((x[:, :42] - sfs_obs) ** 2).sum(axis=1))
     best    = np.argmin(dists)
