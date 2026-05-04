@@ -874,7 +874,7 @@ if __name__ == "__main__":
         pd.DataFrame(samples_np, columns=param_names).to_csv(f"{stem}_samples.csv", index=False)
         print(f"Saved {stem}_samples.csv")
 
-        # Marginal posteriors
+        # Marginal posteriors — combined panel
         fig, axes = plt.subplots(1, len(param_names), figsize=(4 * len(param_names), 5))
         for i, (name, ax) in enumerate(zip(param_names, axes)):
             col = samples_np[:, i]
@@ -897,6 +897,61 @@ if __name__ == "__main__":
         plt.savefig(f"{stem}_marginals.png", dpi=150, bbox_inches="tight")
         plt.close()
         print(f"Saved {stem}_marginals.png")
+
+        # Marginal posteriors — individual plots per parameter
+        os.makedirs(f"{stem}_marginals", exist_ok=True)
+        for i, name in enumerate(param_names):
+            col = samples_np[:, i]
+            mean = col.mean()
+            std = col.std()
+            ci_lo = np.percentile(col, 2.5)
+            ci_hi = np.percentile(col, 97.5)
+            fig, ax = plt.subplots(figsize=(4, 4))
+            ax.hist(col, bins=50, density=True, color="steelblue", alpha=0.7)
+            ax.axvline(mean, color="black", linewidth=1.2, linestyle="--", label="mean")
+            ax.axvspan(ci_lo, ci_hi, alpha=0.15, color="black", label="95% CI")
+            ax.set_title(name, fontsize=13)
+            ax.set_xlabel("Value", fontsize=11)
+            ax.set_ylabel("Density", fontsize=11)
+            ax.text(0.97, 0.97,
+                    f"mean={mean:.3f}\nstd={std:.3f}\nCI=[{ci_lo:.3f}, {ci_hi:.3f}]",
+                    transform=ax.transAxes, ha="right", va="top",
+                    fontsize=8, family="monospace",
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
+            plt.tight_layout()
+            out = os.path.join(f"{stem}_marginals", f"{stem}_marginal_{name}.png")
+            plt.savefig(out, dpi=150, bbox_inches="tight")
+            plt.close()
+        print(f"Saved individual marginals to {stem}_marginals/")
+
+        # Combined alpha + Ne1 panel
+        fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+        for ax, name in zip(axes, ["alpha", "Ne1"]):
+            i = param_names.index(name)
+            col = samples_np[:, i]
+            mean = col.mean()
+            std = col.std()
+            ci_lo = np.percentile(col, 2.5)
+            ci_hi = np.percentile(col, 97.5)
+            ax.hist(col, bins=50, density=True, color="steelblue", alpha=0.7)
+            ax.axvline(mean, color="black", linewidth=1.2, linestyle="--", label="Mean")
+            ax.axvspan(ci_lo, ci_hi, alpha=0.15, color="black", label="95% CI")
+            label = r"$\alpha$" if name == "alpha" else r"$N_{e,1}$ (10–50 gen)"
+            ax.set_title(label, fontsize=13)
+            ax.set_xlabel("Value", fontsize=11)
+            ax.set_ylabel("Density", fontsize=11)
+            ax.text(0.97, 0.97,
+                    f"mean={mean:.3f}\nstd={std:.3f}\nCI=[{ci_lo:.3f}, {ci_hi:.3f}]",
+                    transform=ax.transAxes, ha="right", va="top",
+                    fontsize=8, family="monospace",
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
+            if name == "alpha":
+                ax.legend(fontsize=8)
+        plt.tight_layout()
+        alpha_ne1_path = f"{stem}_marginal_alpha_Ne1.png"
+        plt.savefig(alpha_ne1_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        print(f"Saved {alpha_ne1_path}")
 
         # Joint posterior
         n_params = len(param_names)

@@ -268,3 +268,59 @@ ggplot(summary_table2, aes(x = as.factor(X0), y = X11)) +
 curve(25000*exp(0.000001*x),
       from = 0, to = 10000,
       xlab = "Generations")
+
+# -----------------------------------------------------------------------
+# Model vote plot for Kingman vs Beta-coalescent model choice
+# -----------------------------------------------------------------------
+
+votes_vec    <- as.numeric(prediction$vote[1, ])
+post_proba   <- prediction$post.prob[1]
+selected_idx <- which.max(votes_vec)
+
+model_labels <- c("Kingman\n+ bottleneck",
+                  expression(beta*"-coalescent\n+ constant"),
+                  expression(beta*"-coalescent\n+ bottleneck"))
+
+votes_kb <- data.frame(
+  model    = factor(c("Kingman\n+ bottleneck",
+                      "β-coalescent\n+ constant",
+                      "β-coalescent\n+ bottleneck"),
+                    levels = c("Kingman\n+ bottleneck",
+                               "β-coalescent\n+ constant",
+                               "β-coalescent\n+ bottleneck")),
+  votes    = votes_vec,
+  pct      = votes_vec / sum(votes_vec) * 100,
+  selected = seq_along(votes_vec) == selected_idx
+)
+
+p_kb <- ggplot(votes_kb, aes(x = model, y = pct, fill = selected)) +
+  geom_col(width = 0.6) +
+  scale_fill_manual(
+    values = c("TRUE" = "#0072B2", "FALSE" = "grey70"),
+    guide  = "none"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.08)),
+                     labels = function(x) paste0(x, "%")) +
+  labs(
+    x        = "Model",
+    y        = "Percentage of model votes",
+    title    = "RF-ABC Model Choice: Kingman vs \u03b2-Coalescent",
+    subtitle = sprintf("Selected: %s   |   Posterior probability = %.3f",
+                       as.character(votes_kb$model[selected_idx]), post_proba)
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    plot.title    = element_text(face = "bold", size = 12),
+    plot.subtitle = element_text(color = "grey30", size = 10, margin = margin(b = 10)),
+    axis.text     = element_text(color = "black"),
+    axis.line     = element_line(linewidth = 0.4)
+  )
+
+p_kb
+
+ggsave("abc_rf_kingman_beta_votes.png",  plot = p_kb,
+       width = 5.5, height = 4, dpi = 600, bg = "white")
+ggsave("abc_rf_kingman_beta_votes.pdf",  plot = p_kb,
+       width = 5.5, height = 4, device = cairo_pdf)
+ggsave("abc_rf_kingman_beta_votes.tiff", plot = p_kb,
+       width = 5.5, height = 4, dpi = 600, compression = "lzw")

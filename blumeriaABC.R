@@ -269,16 +269,144 @@ pheatmap(conf_mat_no_singletons[,1:5],
          labels_row = c("1.9","1.7","1.5","1.3","1.1"))
 
 
-quartz(height = 5)
-plot(1:20,1:20)
-plot(model.rf1, data1, n.var = 10) 
-model.rf1$model.rf$variable.importance
-sort(model.rf1$model.rf$variable.importance)
 
-ggplot(data1, aes(x = modindex, y = fSFS1)) +
-  geom_boxplot(fill = "skyblue", outliers = FALSE) +
-  scale_x_discrete(labels = c("1" = "1.9", "2" = "1.7", "3" = "1.5", "4" = "1.3", "5" = "1.1")) +
-  labs(title = "Distribution of mean_AndR2", x = "model_index", y = "mean")
+
+obs_no_singletons <- obs[, !grepl("fSFS1", colnames(obs))]
+
+prediction_no_singletons <- predict(model.rf1_no_singletons, obs_no_singletons, data1_no_singletons)
+prediction_no_singletons
+
+data1_no_SFS <- data1[, !grepl("fSFS", colnames(data1))]
+data1 <- data1[, !grepl("fSFS", colnames(data1))]
+data1 <- data1[, !grepl("AFS", colnames(data1))]
+data1 <- data1[, !grepl("_D", colnames(data1))]
+
+model.rf1_no_SFS <- abcrf(modindex~., data = data1_no_SFS, lda = FALSE)
+model.rf1_no_SFS
+
+obs_no_SFS <- obs[, !grepl("fSFS1", colnames(obs))]
+
+prediction_no_SFS <- predict(model.rf1_no_SFS, obs_no_SFS, data1_no_SFS)
+prediction_no_SFS
+
+
+
+
+data1_no_AFS <- data1_no_SFS[, !grepl("AFS", colnames(data1_no_SFS))]
+data1 <- data1[, !grepl("_D", colnames(data1))]
+
+model.rf1_no_AFS <- abcrf(modindex~., data = data1_no_AFS, lda = FALSE)
+model.rf1_no_AFS
+
+obs_no_AFS <- obs_no_SFS[, !grepl("AFS", colnames(obs_no_SFS))]
+
+prediction_no_AFS <- predict(model.rf1_no_AFS, obs_no_AFS, data1_no_AFS)
+prediction_no_AFS
+
+
+data1_no_D <- data1_no_AFS[, !grepl("_D", colnames(data1_no_AFS))]
+data1 <- data1[, !grepl("_D", colnames(data1))]
+
+model.rf1_no_D <- abcrf(modindex~., data = data1_no_D, lda = FALSE)
+model.rf1_no_D
+
+obs_no_D <- obs_no_AFS[, !grepl("_D", colnames(obs_no_AFS))]
+
+prediction_no_D <- predict(model.rf1_no_D, obs_no_D, data1_no_D)
+prediction_no_D
+
+
+
+# -----------------------------------------------------------------------
+# Combined model vote plot across all 5 RF-ABC configurations
+# -----------------------------------------------------------------------
+
+alpha_levels <- c("1.9", "1.7", "1.5", "1.3", "1.1")
+
+# Helper to extract votes from a prediction object
+extract_votes <- function(pred) as.numeric(pred$vote[1, ])
+
+votes_all <- data.frame(
+  alpha    = rep(factor(alpha_levels, levels = alpha_levels), times = 5),
+  votes    = c(
+    extract_votes(prediction),
+    extract_votes(prediction_no_singletons),
+    extract_votes(prediction_no_SFS),
+    extract_votes(prediction_no_AFS),
+    extract_votes(prediction_no_D)
+  ),
+  rf = rep(
+    c("Full statistics",
+      "No singletons",
+      "No SFS bins",
+      "No SFS bins or quantiles",
+      "No SFS stats or Tajima's D"),
+    each = 5
+  )
+)
+
+votes_all$rf <- factor(votes_all$rf, levels = c(
+  "Full statistics",
+  "No singletons",
+  "No SFS bins",
+  "No SFS bins or quantiles",
+  "No SFS stats or Tajima's D"
+))
+
+# Mark the winning model per RF
+votes_all <- votes_all %>%
+  group_by(rf) %>%
+  mutate(selected = votes == max(votes)) %>%
+  ungroup()
+
+# Okabe-Ito palette for the 5 RF configurations
+rf_colours <- c(
+  "Full statistics"             = "#0072B2",
+  "No singletons"               = "#009E73",
+  "No SFS bins"                 = "#E69F00",
+  "No SFS bins or quantiles"    = "#D55E00",
+  "No SFS stats or Tajima's D"        = "#CC79A7"
+)
+
+# Convert to percentage of votes for cleaner y-axis
+votes_all <- votes_all %>%
+  group_by(rf) %>%
+  mutate(pct = votes / sum(votes) * 100) %>%
+  ungroup()
+
+p_combined <- ggplot(votes_all,
+                     aes(x = alpha, y = pct, fill = rf, alpha = selected)) +
+  geom_col(position = position_dodge(width = 0.85), width = 0.8) +
+  scale_fill_manual(values = rf_colours, name = "Summary statistics") +
+  scale_alpha_manual(values = c("TRUE" = 1.0, "FALSE" = 0.45), guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.08)),
+                     labels = function(x) paste0(x, "%")) +
+  labs(
+    x        = expression(paste("Model ", alpha, " value")),
+    y        = "Percentage of model votes",
+    title    = "RF-ABC Model Choice: Effect of Removing SFS Information",
+    subtitle = "Winning model per RF shown at full opacity"
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    plot.title    = element_text(face = "bold", size = 12),
+    plot.subtitle = element_text(color = "grey30", size = 10, margin = margin(b = 10)),
+    axis.text     = element_text(color = "black"),
+    axis.line     = element_line(linewidth = 0.4),
+    legend.position = "bottom",
+    legend.title  = element_text(size = 9),
+    legend.text   = element_text(size = 8)
+  ) +
+  guides(fill = guide_legend(nrow = 2))
+
+p_combined
+
+ggsave("abc_rf_combined_votes.png",  plot = p_combined,
+       width = 8, height = 5, dpi = 600, bg = "white")
+ggsave("abc_rf_combined_votes.pdf",  plot = p_combined,
+       width = 8, height = 5, device = cairo_pdf)
+ggsave("abc_rf_combined_votes.tiff", plot = p_combined,
+       width = 8, height = 5, dpi = 600, compression = "lzw")
 
 
 
