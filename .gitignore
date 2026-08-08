@@ -1,6 +1,7 @@
 .DS_Store
 test_r2.py
 Bh_TRR356_srDNA_for_abc/
+Bgt_vcfs/
 summary_stats/
 __pycache__/
 sbi-logs/

@@ -769,12 +769,19 @@ if __name__ == "__main__":
     parser.add_argument("--posterior-file", type=str, default=None,
                         help="Posterior file to use for --ppc-only, --sbc-only, and --posterior-plots "
                              "(default: results/posterior.pt)")
+    parser.add_argument("--observed-csv", type=str, default=None,
+                        help="Observed summary-stats CSV to condition the posterior on "
+                             "(default: results/observed_sum_stats_SBI.csv)")
     parser.add_argument("--posterior-plots", action="store_true",
                         help="Load posterior and produce marginal + joint posterior plots, then exit")
     args = parser.parse_args()
 
     if args.posterior_file is None:
         args.posterior_file = os.path.join(RESULTS_DIR, "posterior.pt")
+    if args.observed_csv is None:
+        args.observed_csv = os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")
+    # Tag for output filenames: "observed_sum_stats_SBI_Bgt.csv" -> "Bgt"; base file -> "Bh"
+    obs_tag = os.path.splitext(os.path.basename(args.observed_csv))[0].replace("observed_sum_stats_SBI", "").lstrip("_") or "Bh"
 
     num_workers = os.cpu_count() - 1
 
@@ -801,7 +808,7 @@ if __name__ == "__main__":
             torch.save(posterior, os.path.join(RESULTS_DIR, "posterior.pt"))
             print(f"Saved {os.path.join(RESULTS_DIR, 'posterior.pt')}")
 
-        x_obs = torch.tensor(pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values, dtype=torch.float32).squeeze()
+        x_obs = torch.tensor(pd.read_csv(args.observed_csv).values, dtype=torch.float32).squeeze()
 
         n_ppc = 500
         ppc_params = posterior.sample((n_ppc,), x=x_obs)
@@ -871,11 +878,13 @@ if __name__ == "__main__":
         param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
         posterior_path = args.posterior_file
         stem = os.path.splitext(os.path.basename(posterior_path))[0]  # e.g. "posterior_nsf"
+        stem = f"{stem}_{obs_tag}"  # keep outputs from different observed datasets separate
         fig_stem = os.path.join(FIGURES_DIR, stem)   # figure output prefix
 
         print(f"Loading posterior from {posterior_path}...")
+        print(f"Conditioning on observed stats from {args.observed_csv} (tag: {obs_tag})...")
         posterior = torch.load(posterior_path)
-        x_obs = torch.tensor(pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values, dtype=torch.float32).squeeze()
+        x_obs = torch.tensor(pd.read_csv(args.observed_csv).values, dtype=torch.float32).squeeze()
 
         print("Sampling posterior...")
         samples = posterior.sample((10_000,), x=x_obs)
@@ -1186,7 +1195,7 @@ if __name__ == "__main__":
     
 
     # Sample posterior given observed stats
-    x_obs = torch.tensor(pd.read_csv(os.path.join(RESULTS_DIR, "observed_sum_stats_SBI.csv")).values, dtype=torch.float32).squeeze()
+    x_obs = torch.tensor(pd.read_csv(args.observed_csv).values, dtype=torch.float32).squeeze()
     samples = posterior.sample((10_000,), x=x_obs)
     samples_np = samples.numpy()
     param_names = ["alpha", "k", "Ne1", "Ne2", "Ne3", "Ne4", "Ne5", "Ne6", "Ne7", "Ne8", "Ne9", "Ne10", "Ne11"]
@@ -1199,8 +1208,8 @@ if __name__ == "__main__":
               f"{np.percentile(samples_np[:, i], 97.5):.4f}]")
 
     # Save posterior samples
-    pd.DataFrame(samples_np, columns=param_names).to_csv(os.path.join(RESULTS_DIR, "posterior_samples.csv"), index=False)
-    print(f"Saved {os.path.join(RESULTS_DIR, 'posterior_samples.csv')}")
+    pd.DataFrame(samples_np, columns=param_names).to_csv(os.path.join(RESULTS_DIR, f"posterior_samples_{obs_tag}.csv"), index=False)
+    print(f"Saved {os.path.join(RESULTS_DIR, f'posterior_samples_{obs_tag}.csv')}")
 
     # Plot marginal posteriors
     fig, axes = plt.subplots(1, len(param_names), figsize=(4 * len(param_names), 4))

@@ -8,6 +8,34 @@ exclude_ac_below = 2
 ploidy = 1
 sample_size = 43
 
+# Cap on site count fed into the O(n^2) hamming/LD procedures (calculate_hamming,
+# calculate_r2 and everything downstream of them). Set to match the B. hordei
+# comparison set so results stay comparable across species; a no-op when the
+# input already has <= this many sites.
+pairwise_max_sites = 2879
+pairwise_subsample_seed = 0
+
+
+def stratified_subsample_mask(chrom, target_n, seed):
+    """Boolean mask keeping a chromosome-proportional random subsample of sites.
+
+    Random (not frequency- or position-based) so it doesn't bias which pairwise
+    distances get sampled -- long-range LD signal should survive uniform thinning.
+    Returns an all-True mask if there are already <= target_n sites.
+    """
+    n = len(chrom)
+    if target_n is None or n <= target_n:
+        return np.ones(n, dtype=bool)
+
+    rng = np.random.default_rng(seed)
+    keep = np.zeros(n, dtype=bool)
+    for c in np.unique(chrom):
+        idx = np.flatnonzero(chrom == c)
+        n_keep = min(len(idx), max(1, round(len(idx) * target_n / n)))
+        keep[rng.choice(idx, size=n_keep, replace=False)] = True
+    return keep
+
+
 def sfs_symmetry_ratio(afs, sample_size):
     midpoint = sample_size // 2
     low = afs[1:midpoint].sum()
@@ -25,10 +53,10 @@ def sfs_singleton_highfreq_ratio(afs, sample_size, highfreq_cutoff=2):
     return singletons / high_freq
 
 
-def add_sfs_summary(afs, sample_size, summary_statistics):
+def add_sfs_summary(afs, sample_size, summary_statistics, species_label, out_path):
     """
     Builds afs_entries from an AFS vector and appends
-    SFS summary statistics (bins 1 through 14 and 15+) directly to 
+    SFS summary statistics (bins 1 through 14 and 15+) directly to
     an existing summary_statistics list.
 
     Parameters
@@ -39,6 +67,10 @@ def add_sfs_summary(afs, sample_size, summary_statistics):
         Number of haploid individuals.
     summary_statistics : list
         Pre-existing list to append the SFS summary statistics to.
+    species_label : str
+        Used in the plot title, e.g. "B. hordei".
+    out_path : str
+        Where to save the SFS plot.
 
     Returns
     -------
@@ -72,11 +104,11 @@ def add_sfs_summary(afs, sample_size, summary_statistics):
     ax.bar(derived_counts, values, color='#0072B2', alpha=0.8)
     ax.set_xlabel("Derived allele count")
     ax.set_ylabel("Proportion of segregating sites")
-    ax.set_title("B. hordei Site Frequency Spectrum")
+    ax.set_title(f"{species_label} Site Frequency Spectrum")
     plt.tight_layout()
-    plt.savefig("sfs_observed.png", dpi=150, bbox_inches="tight")
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print("Saved sfs_observed.png")
+    print(f"Saved {out_path}")
     return afs_entries
 
 def calculate_hamming(h, ploidy, summary_statistics):
@@ -647,7 +679,9 @@ np.set_printoptions(legacy="1.21") #exclude dbtype from np arrays
 summary_statistics = [] #Initialize list of summary statistics
 
 
-vcf_path = "Bh_TRR356_srDNA_for_abc/ABC_regions_allFilters_3Mbp.vcf.gz"
+vcf_path = "Bgt_vcfs/Bgt_ABC_regions_allFilters_3Mbp.vcf.gz"
+species_tag = "Bgt"        # used in output filenames, e.g. "Bh", "Bgt"
+species_label = "B. tritici"  # used in plot titles
 
 
 
@@ -702,7 +736,9 @@ sfs = np.bincount(derived_counts, minlength=n+1)
 print(sfs)
 print(len(sfs))
 
-afs_entries = add_sfs_summary(afs = sfs, sample_size = 43, summary_statistics = summary_statistics) #12:26 SFS
+_sfs_plot_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", f"sfs_observed_{species_tag}.png")
+os.makedirs(os.path.dirname(_sfs_plot_path), exist_ok=True)
+afs_entries = add_sfs_summary(afs = sfs, sample_size = 43, summary_statistics = summary_statistics, species_label = species_label, out_path = _sfs_plot_path) #12:26 SFS
 print("Summary stat length = ",len(summary_statistics))
 print(summary_statistics)
 
@@ -725,16 +761,16 @@ window_size = 100_000
 results = []
 
 for c in np.unique(chrom):
-    
-    mask = chrom == c
-    
-    pos_c = pos[mask]
-    ac_c = ac[mask]
-    
+
+    mask_c = chrom == c
+
+    pos_c = pos[mask_c]
+    ac_c = ac[mask_c]
+
     # Compute filters on chromosome-specific array
     seg = ac_c.is_segregating()
     bi = ac_c.max_allele() == 1
-    
+
     keep = seg & bi
     
     pos_c = pos_c[keep]
@@ -767,16 +803,22 @@ summary_statistics.append(np.nanstd(D_array) / np.nanmean(D_array)) #35 CV Tajim
 print(summary_statistics)
 
 
-calculate_hamming(h = hap, ploidy = 1, summary_statistics = summary_statistics)
+ld_mask = stratified_subsample_mask(chrom, pairwise_max_sites, pairwise_subsample_seed)
+print(f"Pairwise (O(n^2)) subsample: {ld_mask.sum()} of {len(ld_mask)} sites")
+hap_ld = hap[ld_mask]
+chrom_ld = chrom[ld_mask]
+pos_ld = pos[ld_mask]
+
+calculate_hamming(h = hap_ld, ploidy = 1, summary_statistics = summary_statistics)
 print(summary_statistics)
 
-s, s_norm, mask = calculate_r2(g = hap, exclude_ac_below = exclude_ac_below)
+s, s_norm, mask = calculate_r2(g = hap_ld, exclude_ac_below = exclude_ac_below)
 
 print("s =", s)
 print("s_norm:", s_norm)
 print("mask:", mask)
 
-unique_chrom, counts = np.unique(chrom, return_counts=True)
+unique_chrom, counts = np.unique(chrom_ld, return_counts=True)
 
 for c, n in zip(unique_chrom, counts):
     print(f"{c}: {n} sites")
@@ -785,7 +827,7 @@ print(counts)
 print(counts[0])
 
 
-r2 = get_rsq_per_chromosome(mask = mask, chrom = chrom, s = s)
+r2 = get_rsq_per_chromosome(mask = mask, chrom = chrom_ld, s = s)
 r2_ge_1 = np.mean(r2 >= 1)
 print("Fraction of r2 values >= 1:", r2_ge_1)
 r2_quant = np.nanquantile(r2, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
@@ -810,7 +852,7 @@ print(len(r2[r2 != 0]))
 print(len(summary_statistics))
 
 
-ild_all = get_ILD(mask = mask, chrom = chrom, s = s)
+ild_all = get_ILD(mask = mask, chrom = chrom_ld, s = s)
 ild_ge_1 = np.mean(ild_all >= 1)
 print("Fraction of ILD values >= 1:", ild_ge_1)
 ild_quant = np.nanquantile(ild_all, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
@@ -867,7 +909,7 @@ print(summary_statistics)
 print(len(summary_statistics))
 """
 
-r2_norm = get_rsq_norm_per_chromosome(mask = mask, chrom = chrom, r2_norm = s_norm)
+r2_norm = get_rsq_norm_per_chromosome(mask = mask, chrom = chrom_ld, r2_norm = s_norm)
 r2_norm_ge_1 = np.mean(r2_norm >= 1)
 print("Fraction of r2_norm values >= 1:", r2_norm_ge_1)
 r2_norm_quant = np.nanquantile(r2_norm, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
@@ -890,7 +932,7 @@ print(len(summary_statistics))
 
 
 
-ild_norm_all = get_ILD_norm(mask = mask, chrom = chrom, r2_norm = s_norm)  
+ild_norm_all = get_ILD_norm(mask = mask, chrom = chrom_ld, r2_norm = s_norm)
 ild_norm_ge_1 = np.mean(ild_norm_all >= 1)
 print("Fraction of ild_norm values >= 1:", ild_norm_ge_1)     
 ild_norm_all_quant = np.nanquantile(ild_norm_all, [0.1,0.3,0.5,0.7,0.9,0.95,0.99])
@@ -947,9 +989,9 @@ print("a1:", a1)
 print("chrom:", np.unique(chrom))
 for c in np.unique(chrom):
 
-    mask = chrom == c
-    pos_c = pos[mask]
-    ac_c = ac[mask]
+    mask_tw = chrom == c
+    pos_c = pos[mask_tw]
+    ac_c = ac[mask_tw]
 
     # Filter segregating + biallelic
     seg = ac_c.is_segregating()
@@ -1040,7 +1082,7 @@ summary_statistics.extend(proportions) #137-146 ILD Frequency spectrum
 summary_statistics.append(proportions[0]-proportions[9]) #147 is difference between unlinked and fully linked frequencies
 print(summary_statistics)
 
-adjacent_r2_stats = get_weighted_rsq_stats_per_chromosome(mask = mask, pos=pos, chrom=chrom, s = s)
+adjacent_r2_stats = get_weighted_rsq_stats_per_chromosome(mask = mask, pos=pos_ld, chrom=chrom_ld, s = s)
 
 summary_statistics.extend([
     adjacent_r2_stats['weighted_quantiles'][0.1],
@@ -1066,7 +1108,7 @@ summary_statistics.extend([
 ])
 
 
-adjacent_norm_r2_stats = get_weighted_rsq_stats_per_chromosome(mask = mask, pos=pos, chrom=chrom, s = s_norm)
+adjacent_norm_r2_stats = get_weighted_rsq_stats_per_chromosome(mask = mask, pos=pos_ld, chrom=chrom_ld, s = s_norm)
 
 summary_statistics.extend([
     adjacent_norm_r2_stats['weighted_quantiles'][0.1],
@@ -1092,10 +1134,9 @@ summary_statistics.extend([
 print(summary_statistics)
 
 import pandas as pd
-import os as _os
-_base = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+_base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 df = pd.DataFrame(summary_statistics).T
-out_csv = _os.path.join(_base, "results", "observed_sum_stats_SBI.csv")
-_os.makedirs(_os.path.dirname(out_csv), exist_ok=True)
+out_csv = os.path.join(_base, "results", f"observed_sum_stats_SBI_{species_tag}.csv")
+os.makedirs(os.path.dirname(out_csv), exist_ok=True)
 df.to_csv(out_csv, index=False)
 print(f"Saved {out_csv}")
